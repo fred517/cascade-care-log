@@ -3,17 +3,18 @@ import { format, isToday, isFuture, startOfDay } from 'date-fns';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { ReadingForm } from '@/components/readings/ReadingForm';
 import { WeeklySummary } from '@/components/readings/WeeklySummary';
+import { MonthlyCalendar } from '@/components/readings/MonthlyCalendar';
 import { Reading, MetricType, Threshold, METRICS } from '@/types/wastewater';
 import { useReadings } from '@/hooks/useReadings';
 import { useSite } from '@/hooks/useSite';
-import { Clock, Loader2, CalendarIcon, ChevronLeft, ChevronRight, History, AlertTriangle, Paperclip, ExternalLink, BarChart3, PenLine } from 'lucide-react';
+import { Clock, Loader2, CalendarIcon, ChevronLeft, ChevronRight, History, AlertTriangle, Paperclip, ExternalLink, BarChart3, PenLine, CalendarDays } from 'lucide-react';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
-type ViewMode = 'entry' | 'summary';
+type ViewMode = 'entry' | 'summary' | 'calendar';
 
 export default function Readings() {
   const { site, loading: siteLoading } = useSite();
@@ -118,19 +119,28 @@ export default function Readings() {
 
         {/* View Mode Tabs */}
         <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)} className="mb-6">
-          <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsList className="grid w-full max-w-lg grid-cols-3">
             <TabsTrigger value="entry" className="gap-2">
               <PenLine className="w-4 h-4" />
               Entry
             </TabsTrigger>
             <TabsTrigger value="summary" className="gap-2">
               <BarChart3 className="w-4 h-4" />
-              Weekly Summary
+              Weekly
+            </TabsTrigger>
+            <TabsTrigger value="calendar" className="gap-2">
+              <CalendarDays className="w-4 h-4" />
+              Monthly
             </TabsTrigger>
           </TabsList>
         </Tabs>
 
-        {viewMode === 'summary' ? (
+        {viewMode === 'calendar' ? (
+          <MonthlyCalendar 
+            readings={readings} 
+            onDayClick={handleDayClickFromSummary}
+          />
+        ) : viewMode === 'summary' ? (
           <WeeklySummary 
             readings={readings} 
             onDayClick={handleDayClickFromSummary}
