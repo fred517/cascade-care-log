@@ -14,7 +14,135 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      alert_events: {
+        Row: {
+          acknowledged_at: string | null
+          acknowledged_by: string | null
+          created_at: string
+          id: string
+          metric_id: string
+          metric_name: string
+          notes: string | null
+          resolved_at: string | null
+          severity: string
+          site_id: string | null
+          status: string
+          threshold_max: number | null
+          threshold_min: number | null
+          triggered_at: string
+          value: number
+        }
+        Insert: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          created_at?: string
+          id?: string
+          metric_id: string
+          metric_name: string
+          notes?: string | null
+          resolved_at?: string | null
+          severity?: string
+          site_id?: string | null
+          status?: string
+          threshold_max?: number | null
+          threshold_min?: number | null
+          triggered_at?: string
+          value: number
+        }
+        Update: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          created_at?: string
+          id?: string
+          metric_id?: string
+          metric_name?: string
+          notes?: string | null
+          resolved_at?: string | null
+          severity?: string
+          site_id?: string | null
+          status?: string
+          threshold_max?: number | null
+          threshold_min?: number | null
+          triggered_at?: string
+          value?: number
+        }
+        Relationships: []
+      }
+      email_logs: {
+        Row: {
+          alert_event_id: string | null
+          body: string | null
+          created_at: string
+          fail_reason: string | null
+          id: string
+          provider_id: string | null
+          recipient_email: string
+          recipient_name: string | null
+          sent_at: string | null
+          status: string
+          subject: string
+        }
+        Insert: {
+          alert_event_id?: string | null
+          body?: string | null
+          created_at?: string
+          fail_reason?: string | null
+          id?: string
+          provider_id?: string | null
+          recipient_email: string
+          recipient_name?: string | null
+          sent_at?: string | null
+          status?: string
+          subject: string
+        }
+        Update: {
+          alert_event_id?: string | null
+          body?: string | null
+          created_at?: string
+          fail_reason?: string | null
+          id?: string
+          provider_id?: string | null
+          recipient_email?: string
+          recipient_name?: string | null
+          sent_at?: string | null
+          status?: string
+          subject?: string
+        }
+        Relationships: []
+      }
+      email_recipients: {
+        Row: {
+          alert_types: string[] | null
+          created_at: string
+          email: string
+          id: string
+          is_active: boolean | null
+          name: string
+          site_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          alert_types?: string[] | null
+          created_at?: string
+          email: string
+          id?: string
+          is_active?: boolean | null
+          name: string
+          site_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          alert_types?: string[] | null
+          created_at?: string
+          email?: string
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          site_id?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
