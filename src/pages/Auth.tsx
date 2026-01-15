@@ -1,15 +1,18 @@
 import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { Droplets, Mail, Lock, User, Loader2, ArrowRight, X } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { Droplets, Mail, Lock, User, Loader2, ArrowRight, X, ArrowLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import heroBackground from '@/assets/hero-background.png';
 
+type AuthMode = 'signin' | 'signup' | 'forgot';
+
 export default function Auth() {
   const { user, loading, signIn, signUp } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const [isSignUp, setIsSignUp] = useState(false);
+  const [authMode, setAuthMode] = useState<AuthMode>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -25,13 +28,23 @@ export default function Auth() {
     setIsSubmitting(true);
 
     try {
-      if (isSignUp) {
+      if (authMode === 'forgot') {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/reset-password`,
+        });
+        if (error) {
+          toast.error(error.message);
+        } else {
+          toast.success('Password reset email sent! Check your inbox.');
+          setAuthMode('signin');
+        }
+      } else if (authMode === 'signup') {
         const { error } = await signUp(email, password, displayName);
         if (error) {
           toast.error(error.message);
         } else {
           toast.success('Account created successfully! You can now sign in.');
-          setIsSignUp(false);
+          setAuthMode('signin');
         }
       } else {
         const { error } = await signIn(email, password);
@@ -45,12 +58,12 @@ export default function Auth() {
   };
 
   const openLogin = () => {
-    setIsSignUp(false);
+    setAuthMode('signin');
     setShowAuthModal(true);
   };
 
   const openSignUp = () => {
-    setIsSignUp(true);
+    setAuthMode('signup');
     setShowAuthModal(true);
   };
 
@@ -162,6 +175,17 @@ export default function Auth() {
             </button>
 
             <div className="p-8">
+              {/* Back button for forgot password */}
+              {authMode === 'forgot' && (
+                <button
+                  onClick={() => setAuthMode('signin')}
+                  className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  Back to sign in
+                </button>
+              )}
+
               {/* Logo */}
               <div className="flex items-center justify-center gap-2 mb-6">
                 <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
@@ -171,16 +195,18 @@ export default function Auth() {
               </div>
 
               <h2 className="text-2xl font-bold text-foreground text-center mb-2">
-                {isSignUp ? 'Create Account' : 'Welcome Back'}
+                {authMode === 'signup' && 'Create Account'}
+                {authMode === 'signin' && 'Welcome Back'}
+                {authMode === 'forgot' && 'Reset Password'}
               </h2>
               <p className="text-muted-foreground text-center mb-6">
-                {isSignUp
-                  ? 'Sign up to start monitoring your plant'
-                  : 'Sign in to access your dashboard'}
+                {authMode === 'signup' && 'Sign up to start monitoring your plant'}
+                {authMode === 'signin' && 'Sign in to access your dashboard'}
+                {authMode === 'forgot' && "Enter your email and we'll send you a reset link"}
               </p>
 
               <form onSubmit={handleSubmit} className="space-y-4">
-                {isSignUp && (
+                {authMode === 'signup' && (
                   <div>
                     <label className="block text-sm font-medium text-foreground mb-2">
                       Display Name
@@ -193,7 +219,7 @@ export default function Auth() {
                         onChange={(e) => setDisplayName(e.target.value)}
                         placeholder="John Operator"
                         className="input-field pl-11"
-                        required={isSignUp}
+                        required
                       />
                     </div>
                   </div>
@@ -216,23 +242,37 @@ export default function Auth() {
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">
-                    Password
-                  </label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                    <input
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="••••••••"
-                      className="input-field pl-11"
-                      required
-                      minLength={6}
-                    />
+                {authMode !== 'forgot' && (
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-2">
+                      Password
+                    </label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                      <input
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="••••••••"
+                        className="input-field pl-11"
+                        required
+                        minLength={6}
+                      />
+                    </div>
                   </div>
-                </div>
+                )}
+
+                {authMode === 'signin' && (
+                  <div className="text-right">
+                    <button
+                      type="button"
+                      onClick={() => setAuthMode('forgot')}
+                      className="text-sm text-muted-foreground hover:text-primary transition-colors"
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
+                )}
 
                 <button
                   type="submit"
@@ -242,31 +282,41 @@ export default function Auth() {
                   {isSubmitting ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      {isSignUp ? 'Creating Account...' : 'Signing In...'}
+                      {authMode === 'signup' && 'Creating Account...'}
+                      {authMode === 'signin' && 'Signing In...'}
+                      {authMode === 'forgot' && 'Sending Email...'}
                     </>
                   ) : (
-                    <>{isSignUp ? 'Create Account' : 'Sign In'}</>
+                    <>
+                      {authMode === 'signup' && 'Create Account'}
+                      {authMode === 'signin' && 'Sign In'}
+                      {authMode === 'forgot' && 'Send Reset Link'}
+                    </>
                   )}
                 </button>
               </form>
 
-              <div className="mt-6 text-center">
-                <button
-                  onClick={() => setIsSignUp(!isSignUp)}
-                  className="text-sm text-muted-foreground hover:text-primary transition-colors"
-                >
-                  {isSignUp
-                    ? 'Already have an account? Sign in'
-                    : "Don't have an account? Sign up"}
-                </button>
-              </div>
+              {authMode !== 'forgot' && (
+                <div className="mt-6 text-center">
+                  <button
+                    onClick={() => setAuthMode(authMode === 'signup' ? 'signin' : 'signup')}
+                    className="text-sm text-muted-foreground hover:text-primary transition-colors"
+                  >
+                    {authMode === 'signup'
+                      ? 'Already have an account? Sign in'
+                      : "Don't have an account? Sign up"}
+                  </button>
+                </div>
+              )}
             </div>
 
-            <div className="px-8 pb-6">
-              <p className="text-xs text-center text-muted-foreground">
-                New accounts are assigned the Operator role by default.
-              </p>
-            </div>
+            {authMode === 'signup' && (
+              <div className="px-8 pb-6">
+                <p className="text-xs text-center text-muted-foreground">
+                  New accounts are assigned the Operator role by default.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       )}
