@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { MetricChart } from '@/components/charts/MetricChart';
 import { useReadings } from '@/hooks/useReadings';
@@ -18,7 +18,13 @@ import {
   BarChart3,
   Table as TableIcon,
   Printer,
-  FileDown
+  FileDown,
+  Save,
+  FolderOpen,
+  Trash2,
+  X,
+  Share2,
+  Check
 } from 'lucide-react';
 import { format, subDays, startOfDay, endOfDay } from 'date-fns';
 import { toast } from 'sonner';
@@ -32,6 +38,25 @@ interface DateRange {
   to: Date;
 }
 
+interface ReportTemplate {
+  id: string;
+  name: string;
+  description: string | null;
+  date_range_type: string;
+  date_range_days: number | null;
+  custom_start_date: string | null;
+  custom_end_date: string | null;
+  default_title: string | null;
+  default_notes: string | null;
+  selected_metrics: string[] | null;
+  default_view_mode: string | null;
+  is_shared: boolean;
+  user_id: string;
+  site_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 const presetRanges = [
   { label: 'Last 7 days', days: 7 },
   { label: 'Last 14 days', days: 14 },
@@ -40,7 +65,7 @@ const presetRanges = [
 ];
 
 export default function Reports() {
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const { site, loading: siteLoading } = useSite();
   const { thresholds, getMetricThreshold } = useReadings();
   
@@ -48,6 +73,7 @@ export default function Reports() {
     from: subDays(new Date(), 7),
     to: new Date(),
   });
+  const [activeDatePreset, setActiveDatePreset] = useState<number | null>(7);
   const [readings, setReadings] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('table');
@@ -56,6 +82,158 @@ export default function Reports() {
   const [reportNotes, setReportNotes] = useState('');
   const [reportTitle, setReportTitle] = useState('');
   const reportContentRef = useRef<HTMLDivElement>(null);
+
+  // Template state
+  const [templates, setTemplates] = useState<ReportTemplate[]>([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [showLoadModal, setShowLoadModal] = useState(false);
+  const [savingTemplate, setSavingTemplate] = useState(false);
+  const [templateName, setTemplateName] = useState('');
+  const [templateDescription, setTemplateDescription] = useState('');
+  const [templateIsShared, setTemplateIsShared] = useState(false);
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+
+  // Fetch templates on mount
+  useEffect(() => {
+    if (user) {
+      fetchTemplates();
+    }
+  }, [user, site]);
+
+  const fetchTemplates = async () => {
+    if (!user) return;
+    
+    setLoadingTemplates(true);
+    try {
+      const { data, error } = await supabase
+        .from('report_templates')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setTemplates((data || []) as ReportTemplate[]);
+    } catch (error) {
+      console.error('Error fetching templates:', error);
+    } finally {
+      setLoadingTemplates(false);
+    }
+  };
+
+  // Save template
+  const handleSaveTemplate = async () => {
+    if (!user || !templateName.trim()) {
+      toast.error('Please enter a template name');
+      return;
+    }
+
+    setSavingTemplate(true);
+    try {
+      const templateData = {
+        name: templateName.trim(),
+        description: templateDescription.trim() || null,
+        user_id: user.id,
+        site_id: site?.id || null,
+        date_range_type: activeDatePreset ? 'preset' : 'custom',
+        date_range_days: activeDatePreset || null,
+        custom_start_date: activeDatePreset ? null : format(dateRange.from, 'yyyy-MM-dd'),
+        custom_end_date: activeDatePreset ? null : format(dateRange.to, 'yyyy-MM-dd'),
+        default_title: reportTitle.trim() || null,
+        default_notes: reportNotes.trim() || null,
+        selected_metrics: selectedMetric ? [selectedMetric] : null,
+        default_view_mode: viewMode,
+        is_shared: templateIsShared,
+      };
+
+      if (editingTemplateId) {
+        const { error } = await supabase
+          .from('report_templates')
+          .update(templateData)
+          .eq('id', editingTemplateId);
+
+        if (error) throw error;
+        toast.success('Template updated successfully');
+      } else {
+        const { error } = await supabase
+          .from('report_templates')
+          .insert(templateData);
+
+        if (error) throw error;
+        toast.success('Template saved successfully');
+      }
+
+      setShowSaveModal(false);
+      setTemplateName('');
+      setTemplateDescription('');
+      setTemplateIsShared(false);
+      setEditingTemplateId(null);
+      fetchTemplates();
+    } catch (error) {
+      console.error('Error saving template:', error);
+      toast.error('Failed to save template');
+    } finally {
+      setSavingTemplate(false);
+    }
+  };
+
+  // Load template
+  const handleLoadTemplate = (template: ReportTemplate) => {
+    // Apply date range
+    if (template.date_range_type === 'preset' && template.date_range_days) {
+      setActiveDatePreset(template.date_range_days);
+      setDateRange({
+        from: subDays(new Date(), template.date_range_days),
+        to: new Date(),
+      });
+    } else if (template.custom_start_date && template.custom_end_date) {
+      setActiveDatePreset(null);
+      setDateRange({
+        from: new Date(template.custom_start_date),
+        to: new Date(template.custom_end_date),
+      });
+    }
+
+    // Apply other settings
+    if (template.default_title) setReportTitle(template.default_title);
+    if (template.default_notes) setReportNotes(template.default_notes);
+    if (template.default_view_mode) setViewMode(template.default_view_mode as ViewMode);
+    if (template.selected_metrics?.length) {
+      setSelectedMetric(template.selected_metrics[0] as MetricType);
+    } else {
+      setSelectedMetric(null);
+    }
+
+    setShowLoadModal(false);
+    toast.success(`Template "${template.name}" loaded`);
+  };
+
+  // Delete template
+  const handleDeleteTemplate = async (templateId: string) => {
+    try {
+      const { error } = await supabase
+        .from('report_templates')
+        .delete()
+        .eq('id', templateId);
+
+      if (error) throw error;
+      
+      setTemplates(prev => prev.filter(t => t.id !== templateId));
+      toast.success('Template deleted');
+    } catch (error) {
+      console.error('Error deleting template:', error);
+      toast.error('Failed to delete template');
+    }
+  };
+
+  // Edit template
+  const handleEditTemplate = (template: ReportTemplate) => {
+    setTemplateName(template.name);
+    setTemplateDescription(template.description || '');
+    setTemplateIsShared(template.is_shared);
+    setEditingTemplateId(template.id);
+    setShowLoadModal(false);
+    setShowSaveModal(true);
+  };
 
   // Fetch readings for date range
   const fetchReportData = async () => {
@@ -83,10 +261,20 @@ export default function Reports() {
 
   // Apply preset range
   const applyPreset = (days: number) => {
+    setActiveDatePreset(days);
     setDateRange({
       from: subDays(new Date(), days),
       to: new Date(),
     });
+  };
+
+  // Handle custom date change
+  const handleDateChange = (type: 'from' | 'to', value: string) => {
+    setActiveDatePreset(null);
+    setDateRange(prev => ({
+      ...prev,
+      [type]: new Date(value),
+    }));
   };
 
   // Generate report
@@ -521,10 +709,36 @@ export default function Reports() {
       <div className="max-w-7xl mx-auto print:max-w-none">
         {/* Header */}
         <div className="mb-8 print:mb-4">
-          <h1 className="text-3xl font-bold text-foreground mb-2">Reports</h1>
-          <p className="text-muted-foreground">
-            Generate reports for readings and trends within a selected date range
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-bold text-foreground mb-2">Reports</h1>
+              <p className="text-muted-foreground">
+                Generate reports for readings and trends within a selected date range
+              </p>
+            </div>
+            <div className="flex items-center gap-2 print:hidden">
+              <button
+                onClick={() => setShowLoadModal(true)}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border hover:bg-muted transition-colors text-sm"
+              >
+                <FolderOpen className="w-4 h-4" />
+                Load Template
+              </button>
+              <button
+                onClick={() => {
+                  setEditingTemplateId(null);
+                  setTemplateName('');
+                  setTemplateDescription('');
+                  setTemplateIsShared(false);
+                  setShowSaveModal(true);
+                }}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors text-sm"
+              >
+                <Save className="w-4 h-4" />
+                Save as Template
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Date Range Selection */}
@@ -542,7 +756,7 @@ export default function Reports() {
                 onClick={() => applyPreset(preset.days)}
                 className={cn(
                   "px-4 py-2 rounded-lg text-sm font-medium transition-colors",
-                  subDays(new Date(), preset.days).toDateString() === dateRange.from.toDateString()
+                  activeDatePreset === preset.days
                     ? "bg-primary text-primary-foreground"
                     : "bg-muted hover:bg-muted/80 text-foreground"
                 )}
@@ -561,10 +775,7 @@ export default function Reports() {
               <input
                 type="date"
                 value={format(dateRange.from, 'yyyy-MM-dd')}
-                onChange={(e) => setDateRange(prev => ({ 
-                  ...prev, 
-                  from: new Date(e.target.value) 
-                }))}
+                onChange={(e) => handleDateChange('from', e.target.value)}
                 className="input-field"
               />
             </div>
@@ -575,10 +786,7 @@ export default function Reports() {
               <input
                 type="date"
                 value={format(dateRange.to, 'yyyy-MM-dd')}
-                onChange={(e) => setDateRange(prev => ({ 
-                  ...prev, 
-                  to: new Date(e.target.value) 
-                }))}
+                onChange={(e) => handleDateChange('to', e.target.value)}
                 max={format(new Date(), 'yyyy-MM-dd')}
                 className="input-field"
               />
@@ -895,6 +1103,220 @@ export default function Reports() {
           </div>
         )}
       </div>
+
+      {/* Save Template Modal */}
+      {showSaveModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+          <div className="bg-card rounded-xl border border-border shadow-xl w-full max-w-md mx-4">
+            <div className="flex items-center justify-between p-6 border-b border-border">
+              <h2 className="text-lg font-semibold text-foreground">
+                {editingTemplateId ? 'Update Template' : 'Save as Template'}
+              </h2>
+              <button
+                onClick={() => setShowSaveModal(false)}
+                className="p-2 hover:bg-muted rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Template Name *
+                </label>
+                <input
+                  type="text"
+                  value={templateName}
+                  onChange={(e) => setTemplateName(e.target.value)}
+                  placeholder="e.g., Weekly Summary Report"
+                  className="input-field"
+                  maxLength={100}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Description (Optional)
+                </label>
+                <textarea
+                  value={templateDescription}
+                  onChange={(e) => setTemplateDescription(e.target.value)}
+                  placeholder="Describe what this template is for..."
+                  className="input-field min-h-[80px] resize-y"
+                  maxLength={500}
+                />
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setTemplateIsShared(!templateIsShared)}
+                  className={cn(
+                    "flex items-center justify-center w-5 h-5 rounded border transition-colors",
+                    templateIsShared
+                      ? "bg-primary border-primary text-primary-foreground"
+                      : "border-border bg-background"
+                  )}
+                >
+                  {templateIsShared && <Check className="w-3 h-3" />}
+                </button>
+                <div>
+                  <label className="text-sm font-medium text-foreground flex items-center gap-2">
+                    <Share2 className="w-4 h-4" />
+                    Share with team
+                  </label>
+                  <p className="text-xs text-muted-foreground">
+                    Allow other site members to use this template
+                  </p>
+                </div>
+              </div>
+              <div className="bg-muted/50 rounded-lg p-4 text-sm">
+                <p className="text-muted-foreground mb-2">This template will save:</p>
+                <ul className="text-foreground space-y-1">
+                  <li>• Date range: {activeDatePreset ? `Last ${activeDatePreset} days` : 'Custom dates'}</li>
+                  <li>• View mode: {viewMode === 'table' ? 'Table' : 'Charts'}</li>
+                  {reportTitle && <li>• Title: {reportTitle}</li>}
+                  {reportNotes && <li>• Notes included</li>}
+                  {selectedMetric && <li>• Selected metric: {METRICS[selectedMetric].name}</li>}
+                </ul>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-3 p-6 border-t border-border">
+              <button
+                onClick={() => setShowSaveModal(false)}
+                className="px-4 py-2 rounded-lg border border-border hover:bg-muted transition-colors text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveTemplate}
+                disabled={savingTemplate || !templateName.trim()}
+                className="btn-primary flex items-center gap-2 disabled:opacity-50"
+              >
+                {savingTemplate ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" />
+                    {editingTemplateId ? 'Update' : 'Save'} Template
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Load Template Modal */}
+      {showLoadModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+          <div className="bg-card rounded-xl border border-border shadow-xl w-full max-w-lg mx-4 max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between p-6 border-b border-border">
+              <h2 className="text-lg font-semibold text-foreground">Load Template</h2>
+              <button
+                onClick={() => setShowLoadModal(false)}
+                className="p-2 hover:bg-muted rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              {loadingTemplates ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                </div>
+              ) : templates.length === 0 ? (
+                <div className="text-center py-8">
+                  <FolderOpen className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+                  <p className="text-muted-foreground">No templates saved yet</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Save your first template to quickly reuse report settings
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {templates.map(template => (
+                    <div
+                      key={template.id}
+                      className="border border-border rounded-lg p-4 hover:border-primary/50 transition-colors"
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-medium text-foreground truncate">{template.name}</h3>
+                            {template.is_shared && (
+                              <Share2 className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                            )}
+                            {template.user_id !== user?.id && (
+                              <span className="text-xs bg-muted px-2 py-0.5 rounded">Shared</span>
+                            )}
+                          </div>
+                          {template.description && (
+                            <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                              {template.description}
+                            </p>
+                          )}
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            <span className="text-xs bg-muted px-2 py-1 rounded">
+                              {template.date_range_type === 'preset' 
+                                ? `Last ${template.date_range_days} days` 
+                                : 'Custom dates'}
+                            </span>
+                            <span className="text-xs bg-muted px-2 py-1 rounded">
+                              {template.default_view_mode === 'table' ? 'Table' : 'Charts'}
+                            </span>
+                            {template.default_title && (
+                              <span className="text-xs bg-muted px-2 py-1 rounded truncate max-w-[150px]">
+                                {template.default_title}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          <button
+                            onClick={() => handleLoadTemplate(template)}
+                            className="p-2 hover:bg-primary/10 text-primary rounded-lg transition-colors"
+                            title="Load template"
+                          >
+                            <Check className="w-4 h-4" />
+                          </button>
+                          {template.user_id === user?.id && (
+                            <>
+                              <button
+                                onClick={() => handleEditTemplate(template)}
+                                className="p-2 hover:bg-muted rounded-lg transition-colors"
+                                title="Edit template"
+                              >
+                                <Save className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteTemplate(template.id)}
+                                className="p-2 hover:bg-destructive/10 text-destructive rounded-lg transition-colors"
+                                title="Delete template"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="p-6 border-t border-border">
+              <button
+                onClick={() => setShowLoadModal(false)}
+                className="w-full px-4 py-2 rounded-lg border border-border hover:bg-muted transition-colors text-sm"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppLayout>
   );
 }

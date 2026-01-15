@@ -223,6 +223,71 @@ export type Database = {
           },
         ]
       }
+      report_templates: {
+        Row: {
+          created_at: string
+          custom_end_date: string | null
+          custom_start_date: string | null
+          date_range_days: number | null
+          date_range_type: string
+          default_notes: string | null
+          default_title: string | null
+          default_view_mode: string | null
+          description: string | null
+          id: string
+          is_shared: boolean | null
+          name: string
+          selected_metrics: string[] | null
+          site_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          custom_end_date?: string | null
+          custom_start_date?: string | null
+          date_range_days?: number | null
+          date_range_type?: string
+          default_notes?: string | null
+          default_title?: string | null
+          default_view_mode?: string | null
+          description?: string | null
+          id?: string
+          is_shared?: boolean | null
+          name: string
+          selected_metrics?: string[] | null
+          site_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          custom_end_date?: string | null
+          custom_start_date?: string | null
+          date_range_days?: number | null
+          date_range_type?: string
+          default_notes?: string | null
+          default_title?: string | null
+          default_view_mode?: string | null
+          description?: string | null
+          id?: string
+          is_shared?: boolean | null
+          name?: string
+          selected_metrics?: string[] | null
+          site_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "report_templates_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       site_members: {
         Row: {
           created_at: string
