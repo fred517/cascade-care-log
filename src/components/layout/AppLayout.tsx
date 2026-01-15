@@ -1,5 +1,5 @@
 import { ReactNode, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   PlusCircle, 
@@ -10,9 +10,13 @@ import {
   Menu,
   X,
   Droplets,
-  ChevronRight
+  ChevronRight,
+  LogOut,
+  User,
+  Shield
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/hooks/useAuth';
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -24,12 +28,37 @@ const navItems = [
   { path: '/trends', label: 'Trends', icon: TrendingUp },
   { path: '/alerts', label: 'Alerts', icon: Bell },
   { path: '/guides', label: 'How-To Guides', icon: BookOpen },
-  { path: '/settings', label: 'Settings', icon: Settings },
+  { path: '/settings', label: 'Settings', icon: Settings, requiredRole: 'supervisor' as const },
 ];
 
 export function AppLayout({ children }: AppLayoutProps) {
   const location = useLocation();
+  const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { profile, role, signOut, isSupervisor } = useAuth();
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate('/auth');
+  };
+
+  const getRoleBadgeColor = () => {
+    switch (role) {
+      case 'admin':
+        return 'bg-primary/20 text-primary';
+      case 'supervisor':
+        return 'bg-status-info/20 text-status-info';
+      default:
+        return 'bg-muted text-muted-foreground';
+    }
+  };
+
+  const filteredNavItems = navItems.filter(item => {
+    if (item.requiredRole === 'supervisor') {
+      return isSupervisor;
+    }
+    return true;
+  });
 
   return (
     <div className="min-h-screen bg-background">
@@ -70,7 +99,7 @@ export function AppLayout({ children }: AppLayoutProps) {
 
         {/* Navigation */}
         <nav className="p-4 space-y-1">
-          {navItems.map((item) => {
+          {filteredNavItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
             
@@ -95,12 +124,47 @@ export function AppLayout({ children }: AppLayoutProps) {
           })}
         </nav>
 
-        {/* Site Selector */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-border">
+        {/* User Profile & Sign Out */}
+        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-border space-y-3">
+          {/* User Info */}
           <div className="p-3 rounded-lg bg-secondary">
-            <p className="text-xs text-muted-foreground mb-1">Current Site</p>
-            <p className="font-medium">Main Treatment Plant</p>
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full bg-primary/20 flex items-center justify-center">
+                {profile?.avatar_url ? (
+                  <img 
+                    src={profile.avatar_url} 
+                    alt={profile.display_name || ''} 
+                    className="w-full h-full rounded-full object-cover"
+                  />
+                ) : (
+                  <User className="w-4 h-4 text-primary" />
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-sm truncate">
+                  {profile?.display_name || 'User'}
+                </p>
+                <div className="flex items-center gap-1">
+                  <Shield className="w-3 h-3 text-muted-foreground" />
+                  <span className={cn(
+                    "text-xs px-1.5 py-0.5 rounded-full capitalize",
+                    getRoleBadgeColor()
+                  )}>
+                    {role || 'operator'}
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
+
+          {/* Sign Out */}
+          <button
+            onClick={handleSignOut}
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors text-sm"
+          >
+            <LogOut className="w-4 h-4" />
+            Sign Out
+          </button>
         </div>
       </aside>
 
