@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { ReadingForm } from '@/components/readings/ReadingForm';
 import { Reading } from '@/types/wastewater';
+import { mockThresholds } from '@/data/mockData';
 import { Clock } from 'lucide-react';
 
 export default function Readings() {
@@ -44,7 +45,7 @@ export default function Readings() {
         </div>
 
         {/* Form */}
-        <ReadingForm onSubmit={handleSubmit} />
+        <ReadingForm onSubmit={handleSubmit} thresholds={mockThresholds} />
 
         {/* Recent Submissions */}
         {recentSubmissions.length > 0 && (

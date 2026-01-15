@@ -1,16 +1,19 @@
 import { useState } from 'react';
-import { METRICS, MetricType, Reading } from '@/types/wastewater';
-import { Check, ChevronRight, Info } from 'lucide-react';
+import { METRICS, MetricType, Reading, Threshold } from '@/types/wastewater';
+import { Check, ChevronRight, Info, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { useAlertEmail } from '@/hooks/useAlertEmail';
+import { mockPlaybooks } from '@/data/mockData';
 
 interface ReadingFormProps {
   onSubmit: (readings: Omit<Reading, 'id'>[]) => void;
+  thresholds?: Threshold[];
 }
 
 const metricOrder: MetricType[] = ['svi', 'ph', 'do', 'orp', 'mlss', 'ammonia'];
 
-export function ReadingForm({ onSubmit }: ReadingFormProps) {
+export function ReadingForm({ onSubmit, thresholds = [] }: ReadingFormProps) {
   const [values, setValues] = useState<Record<MetricType, string>>({
     svi: '',
     ph: '',
@@ -29,6 +32,31 @@ export function ReadingForm({ onSubmit }: ReadingFormProps) {
   });
   const [currentStep, setCurrentStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { checkThresholds } = useAlertEmail();
+
+  // Get threshold for a metric
+  const getThreshold = (metricId: MetricType): Threshold | undefined => {
+    return thresholds.find(t => t.metricId === metricId);
+  };
+
+  // Check if value is out of range
+  const isOutOfRange = (metricId: MetricType, value: string): 'low' | 'high' | null => {
+    const numValue = parseFloat(value);
+    if (isNaN(numValue)) return null;
+    
+    const threshold = getThreshold(metricId);
+    if (!threshold) {
+      // Use default ranges if no threshold set
+      const metric = METRICS[metricId];
+      if (numValue < metric.defaultMin) return 'low';
+      if (numValue > metric.defaultMax) return 'high';
+      return null;
+    }
+    
+    if (numValue < threshold.min) return 'low';
+    if (numValue > threshold.max) return 'high';
+    return null;
+  };
 
   const handleValueChange = (metricId: MetricType, value: string) => {
     // Allow empty, numbers, and decimal points
@@ -45,6 +73,7 @@ export function ReadingForm({ onSubmit }: ReadingFormProps) {
     setIsSubmitting(true);
     
     const readings: Omit<Reading, 'id'>[] = [];
+    const violations: { metricId: MetricType; value: number; type: 'low' | 'high' }[] = [];
     const now = new Date();
 
     metricOrder.forEach(metricId => {
@@ -58,6 +87,12 @@ export function ReadingForm({ onSubmit }: ReadingFormProps) {
           siteId: 'site-1',
           notes: notes[metricId] || undefined,
         });
+
+        // Check for threshold violations
+        const violation = isOutOfRange(metricId, values[metricId]);
+        if (violation) {
+          violations.push({ metricId, value, type: violation });
+        }
       }
     });
 
@@ -67,10 +102,38 @@ export function ReadingForm({ onSubmit }: ReadingFormProps) {
       return;
     }
 
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
+    // Submit readings
     onSubmit(readings);
+    
+    // Process threshold violations and trigger alerts
+    if (violations.length > 0) {
+      toast.warning(`${violations.length} threshold violation${violations.length > 1 ? 's' : ''} detected - sending alerts`);
+      
+      for (const violation of violations) {
+        const threshold = getThreshold(violation.metricId);
+        const metric = METRICS[violation.metricId];
+        const thresholdMin = threshold?.min ?? metric.defaultMin;
+        const thresholdMax = threshold?.max ?? metric.defaultMax;
+        
+        // Find matching playbook
+        const playbook = mockPlaybooks.find(
+          p => p.metricId === violation.metricId && p.condition === violation.type
+        );
+        
+        try {
+          await checkThresholds(
+            violation.metricId,
+            violation.value,
+            thresholdMin,
+            thresholdMax,
+            playbook ? [{ condition: playbook.condition, steps: playbook.steps }] : undefined
+          );
+        } catch (error) {
+          console.error('Error triggering alert for', violation.metricId, error);
+        }
+      }
+    }
+    
     toast.success(`${readings.length} reading${readings.length > 1 ? 's' : ''} saved successfully`);
     
     // Reset form
@@ -125,9 +188,27 @@ export function ReadingForm({ onSubmit }: ReadingFormProps) {
             value={values[currentMetric]}
             onChange={(e) => handleValueChange(currentMetric, e.target.value)}
             placeholder={`Enter ${metric.name} reading`}
-            className="input-field text-2xl font-mono text-center"
+            className={cn(
+              "input-field text-2xl font-mono text-center",
+              isOutOfRange(currentMetric, values[currentMetric]) === 'low' && "border-status-warning ring-2 ring-status-warning/20",
+              isOutOfRange(currentMetric, values[currentMetric]) === 'high' && "border-status-critical ring-2 ring-status-critical/20"
+            )}
             autoFocus
           />
+          {isOutOfRange(currentMetric, values[currentMetric]) && (
+            <div className={cn(
+              "flex items-center gap-2 mt-2 p-2 rounded-lg text-sm",
+              isOutOfRange(currentMetric, values[currentMetric]) === 'low'
+                ? "bg-status-warning/10 text-status-warning"
+                : "bg-status-critical/10 text-status-critical"
+            )}>
+              <AlertTriangle className="w-4 h-4" />
+              <span>
+                Value is {isOutOfRange(currentMetric, values[currentMetric]) === 'low' ? 'below minimum' : 'above maximum'} threshold
+                — alert will be triggered on submit
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="mb-6">
