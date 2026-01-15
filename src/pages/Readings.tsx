@@ -5,7 +5,7 @@ import { ReadingForm } from '@/components/readings/ReadingForm';
 import { Reading, MetricType, Threshold, METRICS } from '@/types/wastewater';
 import { useReadings } from '@/hooks/useReadings';
 import { useSite } from '@/hooks/useSite';
-import { Clock, Loader2, CalendarIcon, ChevronLeft, ChevronRight, History, AlertTriangle } from 'lucide-react';
+import { Clock, Loader2, CalendarIcon, ChevronLeft, ChevronRight, History, AlertTriangle, Paperclip, ExternalLink } from 'lucide-react';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils';
 
 export default function Readings() {
   const { site, loading: siteLoading } = useSite();
-  const { thresholds, addMultipleReadings, getReadingsForDate, loading: readingsLoading } = useReadings();
+  const { thresholds, addMultipleReadings, getReadingsForDate, uploadAttachment, loading: readingsLoading } = useReadings();
   const [recentSubmissions, setRecentSubmissions] = useState<Reading[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [calendarOpen, setCalendarOpen] = useState(false);
@@ -27,6 +27,7 @@ export default function Readings() {
       metricId: r.metricId,
       value: r.value,
       notes: r.notes,
+      attachmentUrl: r.attachmentUrl,
     }));
 
     // Use selected date with current time for recording
@@ -238,6 +239,18 @@ export default function Readings() {
                           {reading.notes}
                         </div>
                       )}
+                      {reading.attachment_url && (
+                        <a 
+                          href={reading.attachment_url} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-xs text-primary mt-2 hover:underline"
+                        >
+                          <Paperclip className="w-3 h-3" />
+                          View attachment
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      )}
                     </div>
                   );
                 })}
@@ -259,7 +272,7 @@ export default function Readings() {
                 </p>
               </div>
             )}
-            <ReadingForm onSubmit={handleSubmit} thresholds={formThresholds} />
+            <ReadingForm onSubmit={handleSubmit} thresholds={formThresholds} onUploadFile={uploadAttachment} />
           </>
         )}
 

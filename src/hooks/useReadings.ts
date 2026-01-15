@@ -11,6 +11,7 @@ interface Reading {
   metric_id: string;
   value: number;
   notes: string | null;
+  attachment_url: string | null;
   entered_by: string;
   recorded_at: string;
   created_at: string;
@@ -115,7 +116,7 @@ export function useReadings() {
   };
 
   const addMultipleReadings = async (
-    readingsData: { metricId: MetricType; value: number; notes?: string }[],
+    readingsData: { metricId: MetricType; value: number; notes?: string; attachmentUrl?: string }[],
     recordedAt?: Date
   ) => {
     if (!site || !user) {
@@ -129,6 +130,7 @@ export function useReadings() {
       metric_id: r.metricId,
       value: r.value,
       notes: r.notes || null,
+      attachment_url: r.attachmentUrl || null,
       entered_by: user.id,
       recorded_at: timestamp,
     }));
@@ -147,6 +149,35 @@ export function useReadings() {
       console.error('Error adding readings:', error);
       toast.error('Failed to save readings');
       return [];
+    }
+  };
+
+  // Upload attachment to storage
+  const uploadAttachment = async (file: File): Promise<string | null> => {
+    if (!user) {
+      toast.error('Must be logged in to upload files');
+      return null;
+    }
+
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${user.id}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+
+    try {
+      const { error: uploadError } = await supabase.storage
+        .from('reading-attachments')
+        .upload(fileName, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('reading-attachments')
+        .getPublicUrl(fileName);
+
+      return publicUrl;
+    } catch (error: any) {
+      console.error('Error uploading file:', error);
+      toast.error('Failed to upload file');
+      return null;
     }
   };
 
@@ -249,6 +280,7 @@ export function useReadings() {
     loading,
     addReading,
     addMultipleReadings,
+    uploadAttachment,
     updateThreshold,
     getMetricReadings,
     getMetricThreshold,
