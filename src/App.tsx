@@ -11,6 +11,7 @@ import Trends from "./pages/Trends";
 import Alerts from "./pages/Alerts";
 import Guides from "./pages/Guides";
 import Settings from "./pages/Settings";
+import Reports from "./pages/Reports";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
@@ -70,6 +71,14 @@ const App = () => (
               element={
                 <ProtectedRoute requiredRole="supervisor">
                   <Settings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/reports"
+              element={
+                <ProtectedRoute>
+                  <Reports />
                 </ProtectedRoute>
               }
             />
