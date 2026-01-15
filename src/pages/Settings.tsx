@@ -4,9 +4,10 @@ import { EmailRecipients } from '@/components/settings/EmailRecipients';
 import { Threshold, MetricType, METRICS } from '@/types/wastewater';
 import { useReadings } from '@/hooks/useReadings';
 import { useSite } from '@/hooks/useSite';
+import { useMissingReadingsReminder } from '@/hooks/useMissingReadingsReminder';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
-import { Sliders, Bell, Users, Building2, Check, RotateCcw, Loader2 } from 'lucide-react';
+import { Sliders, Bell, Users, Building2, Check, RotateCcw, Loader2, Send, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 type SettingsTab = 'thresholds' | 'notifications' | 'team' | 'site';
@@ -14,6 +15,7 @@ type SettingsTab = 'thresholds' | 'notifications' | 'team' | 'site';
 export default function Settings() {
   const { site, loading: siteLoading } = useSite();
   const { thresholds, updateThreshold, loading: readingsLoading } = useReadings();
+  const { sendReminder, sending: sendingReminder, lastResult: reminderResult } = useMissingReadingsReminder();
   const [activeTab, setActiveTab] = useState<SettingsTab>('thresholds');
   const [localThresholds, setLocalThresholds] = useState<Record<MetricType, { min: number; max: number; enabled: boolean }>>({
     svi: { min: 50, max: 150, enabled: true },
@@ -268,17 +270,113 @@ export default function Settings() {
           )}
 
           {activeTab === 'notifications' && (
-            <div>
-              <div className="mb-6">
-                <h2 className="text-xl font-semibold text-foreground mb-1">
-                  Email Notifications
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  Manage recipients who will receive alerts when thresholds are exceeded.
+            <div className="space-y-8">
+              {/* Email Recipients Section */}
+              <div>
+                <div className="mb-6">
+                  <h2 className="text-xl font-semibold text-foreground mb-1">
+                    Email Recipients
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    Manage recipients who will receive alerts when thresholds are exceeded.
+                  </p>
+                </div>
+                
+                <EmailRecipients />
+              </div>
+
+              {/* Missing Readings Reminders Section */}
+              <div className="border-t border-border pt-8">
+                <div className="mb-6">
+                  <h2 className="text-xl font-semibold text-foreground mb-1">
+                    Missing Readings Reminders
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    Send email reminders to recipients when readings haven't been recorded for the day.
+                  </p>
+                </div>
+
+                <div className="bg-muted/30 rounded-xl p-6 border border-border">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div>
+                      <h3 className="font-medium text-foreground mb-1">Send Reminder Now</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Check for missing readings today and send email reminders to all active recipients.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => sendReminder(site?.id)}
+                      disabled={sendingReminder}
+                      className="flex items-center gap-2 btn-primary whitespace-nowrap disabled:opacity-50"
+                    >
+                      {sendingReminder ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Sending...
+                        </>
+                      ) : (
+                        <>
+                          <Send className="w-4 h-4" />
+                          Send Reminders
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Last reminder result */}
+                  {reminderResult && (
+                    <div className="mt-4 pt-4 border-t border-border">
+                      <h4 className="text-sm font-medium text-muted-foreground mb-3">Last Check Results</h4>
+                      <div className="space-y-2">
+                        {reminderResult.results.map((result, index) => (
+                          <div 
+                            key={index}
+                            className={cn(
+                              "flex items-center justify-between p-3 rounded-lg",
+                              result.missingCount === 0 
+                                ? "bg-status-normal/10 border border-status-normal/30"
+                                : result.status === 'reminders_sent'
+                                ? "bg-status-warning/10 border border-status-warning/30"
+                                : "bg-muted/50 border border-border"
+                            )}
+                          >
+                            <div className="flex items-center gap-3">
+                              {result.missingCount === 0 ? (
+                                <CheckCircle2 className="w-5 h-5 text-status-normal" />
+                              ) : (
+                                <AlertCircle className="w-5 h-5 text-status-warning" />
+                              )}
+                              <div>
+                                <p className="font-medium text-foreground">{result.site}</p>
+                                <p className="text-sm text-muted-foreground">
+                                  {result.missingCount === 0 
+                                    ? 'All readings complete' 
+                                    : `${result.missingCount} missing: ${result.missingMetrics?.join(', ')}`
+                                  }
+                                </p>
+                              </div>
+                            </div>
+                            {result.status === 'reminders_sent' && result.recipientCount && (
+                              <span className="text-xs bg-status-warning/20 text-status-warning px-2 py-1 rounded-full">
+                                Sent to {result.recipientCount} recipient{result.recipientCount > 1 ? 's' : ''}
+                              </span>
+                            )}
+                            {result.status === 'no_recipients' && (
+                              <span className="text-xs bg-muted text-muted-foreground px-2 py-1 rounded-full">
+                                No recipients
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <p className="text-xs text-muted-foreground mt-4">
+                  💡 Tip: For automated daily reminders, consider setting up a scheduled job to call this function at the end of each shift.
                 </p>
               </div>
-              
-              <EmailRecipients />
             </div>
           )}
 
