@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { METRICS, MetricType } from '@/types/wastewater';
 import { cn } from '@/lib/utils';
@@ -11,7 +11,8 @@ import {
   Calendar,
   ChevronLeft,
   ChevronRight,
-  BarChart3
+  BarChart3,
+  FileDown
 } from 'lucide-react';
 import { 
   format, 
@@ -29,6 +30,8 @@ import {
   isSameMonth
 } from 'date-fns';
 import { toast } from 'sonner';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 import {
   BarChart,
   Bar,
@@ -38,7 +41,6 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-  Cell,
 } from 'recharts';
 
 type ComparisonType = 'week' | 'month';
@@ -71,16 +73,19 @@ interface MetricComparisonStats {
 
 interface ReportComparisonProps {
   siteId: string;
+  siteName?: string;
   getMetricThreshold: (metricId: MetricType) => { min_value: number; max_value: number } | undefined;
 }
 
-export function ReportComparison({ siteId, getMetricThreshold }: ReportComparisonProps) {
+export function ReportComparison({ siteId, siteName, getMetricThreshold }: ReportComparisonProps) {
   const [comparisonType, setComparisonType] = useState<ComparisonType>('week');
   const [referenceDate, setReferenceDate] = useState(new Date());
   const [currentReadings, setCurrentReadings] = useState<any[]>([]);
   const [previousReadings, setPreviousReadings] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [hasData, setHasData] = useState(false);
+  const [exportingPDF, setExportingPDF] = useState(false);
+  const chartRef = useRef<HTMLDivElement>(null);
 
   // Calculate comparison periods
   const periods = useMemo((): { current: ComparisonPeriod; previous: ComparisonPeriod } => {
@@ -245,6 +250,233 @@ export function ReportComparison({ siteId, getMetricThreshold }: ReportCompariso
 
   const hasAnyData = currentReadings.length > 0 || previousReadings.length > 0;
 
+  // Export comparison to PDF
+  const exportComparisonToPDF = async () => {
+    if (!hasAnyData) {
+      toast.error('No data to export');
+      return;
+    }
+
+    setExportingPDF(true);
+    toast.info('Generating comparison PDF...');
+
+    try {
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 15;
+      const contentWidth = pageWidth - 2 * margin;
+      let yPosition = margin;
+
+      // Header
+      pdf.setFontSize(20);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setTextColor(33, 33, 33);
+      pdf.text(`${comparisonType === 'week' ? 'Week-to-Week' : 'Month-to-Month'} Comparison Report`, margin, yPosition);
+      yPosition += 10;
+
+      // Site info
+      pdf.setFontSize(11);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setTextColor(100, 100, 100);
+      if (siteName) {
+        pdf.text(`Site: ${siteName}`, margin, yPosition);
+        yPosition += 6;
+      }
+      pdf.text(`Generated: ${format(new Date(), 'MMMM d, yyyy h:mm a')}`, margin, yPosition);
+      yPosition += 10;
+
+      // Period comparison header
+      pdf.setDrawColor(200, 200, 200);
+      pdf.line(margin, yPosition, pageWidth - margin, yPosition);
+      yPosition += 8;
+
+      pdf.setFontSize(12);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setTextColor(33, 33, 33);
+      pdf.text('Comparison Periods', margin, yPosition);
+      yPosition += 7;
+
+      pdf.setFontSize(10);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setTextColor(60, 60, 60);
+      pdf.text(`Previous: ${periods.previous.label} (${format(periods.previous.from, 'MMM d')} - ${format(periods.previous.to, 'MMM d, yyyy')})`, margin, yPosition);
+      yPosition += 5;
+      pdf.text(`Current: ${periods.current.label} (${format(periods.current.from, 'MMM d')} - ${format(periods.current.to, 'MMM d, yyyy')})`, margin, yPosition);
+      yPosition += 10;
+
+      // Divider
+      pdf.setDrawColor(200, 200, 200);
+      pdf.line(margin, yPosition, pageWidth - margin, yPosition);
+      yPosition += 10;
+
+      // Summary Statistics Table
+      pdf.setFontSize(14);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setTextColor(33, 33, 33);
+      pdf.text('Comparison Statistics', margin, yPosition);
+      yPosition += 8;
+
+      // Table header
+      const colWidths = [30, 20, 25, 25, 20, 25, 25, 20];
+      const headers = ['Metric', 'Cnt', 'Prev Avg', 'Prev Range', 'Cnt', 'Curr Avg', 'Curr Range', 'Change'];
+      
+      pdf.setFillColor(240, 240, 240);
+      pdf.rect(margin, yPosition - 4, contentWidth, 8, 'F');
+      pdf.setFontSize(7);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setTextColor(60, 60, 60);
+      
+      let xPos = margin + 1;
+      headers.forEach((header, idx) => {
+        pdf.text(header, xPos, yPosition);
+        xPos += colWidths[idx];
+      });
+      yPosition += 8;
+
+      // Table rows
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(7);
+
+      Object.entries(METRICS).forEach(([id, metric], index) => {
+        const stats = comparisonStats[id as MetricType];
+        if (!stats || (stats.current.count === 0 && stats.previous.count === 0)) return;
+
+        if (yPosition > pageHeight - 30) {
+          pdf.addPage();
+          yPosition = margin;
+        }
+
+        // Alternate row colors
+        if (index % 2 === 0) {
+          pdf.setFillColor(250, 250, 250);
+          pdf.rect(margin, yPosition - 3, contentWidth, 6, 'F');
+        }
+
+        xPos = margin + 1;
+        pdf.setTextColor(33, 33, 33);
+        
+        // Metric name
+        pdf.text(metric.name, xPos, yPosition);
+        xPos += colWidths[0];
+        
+        // Previous count
+        pdf.text(stats.previous.count.toString(), xPos, yPosition);
+        xPos += colWidths[1];
+        
+        // Previous avg
+        pdf.text(stats.previous.count > 0 ? `${stats.previous.avg.toFixed(metric.precision)} ${metric.unit}` : '-', xPos, yPosition);
+        xPos += colWidths[2];
+        
+        // Previous range
+        pdf.text(stats.previous.count > 0 ? `${stats.previous.min.toFixed(metric.precision)}-${stats.previous.max.toFixed(metric.precision)}` : '-', xPos, yPosition);
+        xPos += colWidths[3];
+        
+        // Current count
+        pdf.text(stats.current.count.toString(), xPos, yPosition);
+        xPos += colWidths[4];
+        
+        // Current avg
+        pdf.setFont('helvetica', 'bold');
+        pdf.text(stats.current.count > 0 ? `${stats.current.avg.toFixed(metric.precision)} ${metric.unit}` : '-', xPos, yPosition);
+        pdf.setFont('helvetica', 'normal');
+        xPos += colWidths[5];
+        
+        // Current range
+        pdf.text(stats.current.count > 0 ? `${stats.current.min.toFixed(metric.precision)}-${stats.current.max.toFixed(metric.precision)}` : '-', xPos, yPosition);
+        xPos += colWidths[6];
+        
+        // Change percent
+        if (stats.current.count > 0 && stats.previous.count > 0) {
+          const changeText = `${stats.changePercent > 0 ? '+' : ''}${stats.changePercent.toFixed(1)}%`;
+          if (stats.changePercent > 5) {
+            pdf.setTextColor(200, 100, 0);
+          } else if (stats.changePercent < -5) {
+            pdf.setTextColor(50, 150, 200);
+          } else {
+            pdf.setTextColor(100, 100, 100);
+          }
+          pdf.text(changeText, xPos, yPosition);
+          pdf.setTextColor(33, 33, 33);
+        } else {
+          pdf.text('-', xPos, yPosition);
+        }
+        
+        yPosition += 6;
+      });
+
+      yPosition += 10;
+
+      // Capture chart if available
+      if (chartRef.current) {
+        try {
+          if (yPosition > pageHeight - 80) {
+            pdf.addPage();
+            yPosition = margin;
+          }
+
+          pdf.setFontSize(14);
+          pdf.setFont('helvetica', 'bold');
+          pdf.setTextColor(33, 33, 33);
+          pdf.text('Comparison Chart', margin, yPosition);
+          yPosition += 8;
+
+          const canvas = await html2canvas(chartRef.current, {
+            backgroundColor: '#ffffff',
+            scale: 2,
+            logging: false,
+            useCORS: true,
+          });
+
+          const imgData = canvas.toDataURL('image/png');
+          const imgWidth = contentWidth;
+          const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+          if (yPosition + imgHeight > pageHeight - margin) {
+            pdf.addPage();
+            yPosition = margin;
+          }
+
+          pdf.addImage(imgData, 'PNG', margin, yPosition, imgWidth, Math.min(imgHeight, pageHeight - yPosition - margin));
+          yPosition += imgHeight + 10;
+        } catch (err) {
+          console.error('Error capturing chart:', err);
+        }
+      }
+
+      // Footer
+      const totalPages = pdf.getNumberOfPages();
+      for (let i = 1; i <= totalPages; i++) {
+        pdf.setPage(i);
+        pdf.setFontSize(8);
+        pdf.setTextColor(150, 150, 150);
+        pdf.text(
+          `Page ${i} of ${totalPages}`,
+          pageWidth / 2,
+          pageHeight - 8,
+          { align: 'center' }
+        );
+        pdf.text(
+          'Wastewater Process Tracker - Comparison Report',
+          margin,
+          pageHeight - 8
+        );
+      }
+
+      // Save PDF
+      const periodLabel = comparisonType === 'week' ? 'weekly' : 'monthly';
+      const filename = `comparison-report-${periodLabel}-${format(new Date(), 'yyyy-MM-dd')}.pdf`;
+      pdf.save(filename);
+
+      toast.success('Comparison PDF downloaded successfully');
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      toast.error('Failed to generate comparison PDF');
+    } finally {
+      setExportingPDF(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Comparison Type Selection */}
@@ -329,23 +561,39 @@ export function ReportComparison({ siteId, getMetricThreshold }: ReportCompariso
             </div>
           </div>
 
-          <button
-            onClick={fetchComparisonData}
-            disabled={loading}
-            className="btn-primary flex items-center gap-2"
-          >
-            {loading ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Loading...
-              </>
-            ) : (
-              <>
-                <BarChart3 className="w-4 h-4" />
-                Compare Periods
-              </>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={fetchComparisonData}
+              disabled={loading}
+              className="btn-primary flex items-center gap-2"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Loading...
+                </>
+              ) : (
+                <>
+                  <BarChart3 className="w-4 h-4" />
+                  Compare Periods
+                </>
+              )}
+            </button>
+            {hasData && hasAnyData && (
+              <button
+                onClick={exportComparisonToPDF}
+                disabled={exportingPDF}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border hover:bg-muted transition-colors text-sm disabled:opacity-50"
+              >
+                {exportingPDF ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <FileDown className="w-4 h-4" />
+                )}
+                Export PDF
+              </button>
             )}
-          </button>
+          </div>
         </div>
       </div>
 
@@ -411,7 +659,7 @@ export function ReportComparison({ siteId, getMetricThreshold }: ReportCompariso
 
           {/* Comparison Chart */}
           {chartData.length > 0 && (
-            <div className="bg-card rounded-xl border border-border p-6">
+            <div ref={chartRef} className="bg-card rounded-xl border border-border p-6">
               <h3 className="text-lg font-semibold text-foreground mb-4">
                 Average Values Comparison
               </h3>
