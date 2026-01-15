@@ -2,21 +2,26 @@ import { useState } from 'react';
 import { format, isToday, isFuture, startOfDay } from 'date-fns';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { ReadingForm } from '@/components/readings/ReadingForm';
+import { WeeklySummary } from '@/components/readings/WeeklySummary';
 import { Reading, MetricType, Threshold, METRICS } from '@/types/wastewater';
 import { useReadings } from '@/hooks/useReadings';
 import { useSite } from '@/hooks/useSite';
-import { Clock, Loader2, CalendarIcon, ChevronLeft, ChevronRight, History, AlertTriangle, Paperclip, ExternalLink } from 'lucide-react';
+import { Clock, Loader2, CalendarIcon, ChevronLeft, ChevronRight, History, AlertTriangle, Paperclip, ExternalLink, BarChart3, PenLine } from 'lucide-react';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+
+type ViewMode = 'entry' | 'summary';
 
 export default function Readings() {
   const { site, loading: siteLoading } = useSite();
-  const { thresholds, addMultipleReadings, getReadingsForDate, uploadAttachment, loading: readingsLoading } = useReadings();
+  const { readings, thresholds, addMultipleReadings, getReadingsForDate, uploadAttachment, loading: readingsLoading } = useReadings();
   const [recentSubmissions, setRecentSubmissions] = useState<Reading[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('entry');
 
   const isSelectedToday = isToday(selectedDate);
   const isSelectedFuture = isFuture(startOfDay(selectedDate));
@@ -82,6 +87,11 @@ export default function Readings() {
     setSelectedDate(new Date());
   };
 
+  const handleDayClickFromSummary = (date: Date) => {
+    setSelectedDate(date);
+    setViewMode('entry');
+  };
+
   const loading = siteLoading || readingsLoading;
 
   if (loading) {
@@ -98,18 +108,36 @@ export default function Readings() {
     <AppLayout>
       <div className="max-w-4xl mx-auto">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-foreground mb-2">
-            {isSelectedToday ? 'Add Daily Readings' : 'Historical Readings'}
-          </h1>
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold text-foreground mb-2">Readings</h1>
           <p className="text-muted-foreground">
-            {isSelectedToday 
-              ? 'Enter today\'s process measurements for all metrics'
-              : 'View or add readings for a past date'
-            }
+            Record and review process measurements
             {site && <span className="ml-1">at {site.name}</span>}
           </p>
         </div>
+
+        {/* View Mode Tabs */}
+        <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)} className="mb-6">
+          <TabsList className="grid w-full max-w-md grid-cols-2">
+            <TabsTrigger value="entry" className="gap-2">
+              <PenLine className="w-4 h-4" />
+              Entry
+            </TabsTrigger>
+            <TabsTrigger value="summary" className="gap-2">
+              <BarChart3 className="w-4 h-4" />
+              Weekly Summary
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+
+        {viewMode === 'summary' ? (
+          <WeeklySummary 
+            readings={readings} 
+            onDayClick={handleDayClickFromSummary}
+          />
+        ) : (
+          <>
+            {/* Date Navigation */}
 
         {/* Date Navigation */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-6">
@@ -304,6 +332,8 @@ export default function Readings() {
               </div>
             </div>
           </div>
+        )}
+          </>
         )}
       </div>
     </AppLayout>
