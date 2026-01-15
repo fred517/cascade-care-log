@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { MetricChart } from '@/components/charts/MetricChart';
 import { useReadings } from '@/hooks/useReadings';
@@ -17,10 +17,13 @@ import {
   Loader2,
   BarChart3,
   Table as TableIcon,
-  Printer
+  Printer,
+  FileDown
 } from 'lucide-react';
 import { format, subDays, startOfDay, endOfDay } from 'date-fns';
 import { toast } from 'sonner';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 type ViewMode = 'table' | 'charts';
 
@@ -49,6 +52,8 @@ export default function Reports() {
   const [loading, setLoading] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('table');
   const [selectedMetric, setSelectedMetric] = useState<MetricType | null>(null);
+  const [exportingPDF, setExportingPDF] = useState(false);
+  const reportContentRef = useRef<HTMLDivElement>(null);
 
   // Fetch readings for date range
   const fetchReportData = async () => {
@@ -208,6 +213,268 @@ export default function Reports() {
     window.print();
   };
 
+  // Export to PDF
+  const exportToPDF = async () => {
+    if (readings.length === 0) {
+      toast.error('No data to export');
+      return;
+    }
+
+    setExportingPDF(true);
+    toast.info('Generating PDF report...');
+
+    try {
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 15;
+      const contentWidth = pageWidth - 2 * margin;
+      let yPosition = margin;
+
+      // Header
+      pdf.setFontSize(20);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setTextColor(33, 33, 33);
+      pdf.text('Wastewater Process Report', margin, yPosition);
+      yPosition += 10;
+
+      // Site and date info
+      pdf.setFontSize(11);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setTextColor(100, 100, 100);
+      pdf.text(`Site: ${site?.name || 'Unknown Site'}`, margin, yPosition);
+      yPosition += 6;
+      pdf.text(`Period: ${format(dateRange.from, 'MMMM d, yyyy')} - ${format(dateRange.to, 'MMMM d, yyyy')}`, margin, yPosition);
+      yPosition += 6;
+      pdf.text(`Generated: ${format(new Date(), 'MMMM d, yyyy h:mm a')} by ${profile?.display_name || 'Operator'}`, margin, yPosition);
+      yPosition += 10;
+
+      // Divider line
+      pdf.setDrawColor(200, 200, 200);
+      pdf.line(margin, yPosition, pageWidth - margin, yPosition);
+      yPosition += 10;
+
+      // Summary Statistics Section
+      pdf.setFontSize(14);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setTextColor(33, 33, 33);
+      pdf.text('Summary Statistics', margin, yPosition);
+      yPosition += 8;
+
+      // Stats table header
+      const statsColWidths = [35, 25, 25, 25, 25, 30];
+      const statsHeaders = ['Metric', 'Count', 'Min', 'Max', 'Avg', 'Status'];
+      
+      pdf.setFillColor(240, 240, 240);
+      pdf.rect(margin, yPosition - 4, contentWidth, 8, 'F');
+      pdf.setFontSize(9);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setTextColor(60, 60, 60);
+      
+      let xPos = margin + 2;
+      statsHeaders.forEach((header, idx) => {
+        pdf.text(header, xPos, yPosition);
+        xPos += statsColWidths[idx];
+      });
+      yPosition += 8;
+
+      // Stats table content
+      pdf.setFont('helvetica', 'normal');
+      pdf.setTextColor(33, 33, 33);
+      
+      Object.entries(METRICS).forEach(([id, metric]) => {
+        const stats = metricStats[id as MetricType];
+        if (!stats || stats.count === 0) return;
+
+        if (yPosition > pageHeight - 30) {
+          pdf.addPage();
+          yPosition = margin;
+        }
+
+        xPos = margin + 2;
+        pdf.setFontSize(8);
+        pdf.text(metric.name, xPos, yPosition);
+        xPos += statsColWidths[0];
+        pdf.text(stats.count.toString(), xPos, yPosition);
+        xPos += statsColWidths[1];
+        pdf.text(stats.min.toFixed(metric.precision), xPos, yPosition);
+        xPos += statsColWidths[2];
+        pdf.text(stats.max.toFixed(metric.precision), xPos, yPosition);
+        xPos += statsColWidths[3];
+        pdf.text(stats.avg.toFixed(metric.precision) + ' ' + metric.unit, xPos, yPosition);
+        xPos += statsColWidths[4];
+        
+        if (stats.outOfRange > 0) {
+          pdf.setTextColor(200, 100, 0);
+          pdf.text(`${stats.outOfRange} out of range`, xPos, yPosition);
+          pdf.setTextColor(33, 33, 33);
+        } else {
+          pdf.setTextColor(50, 150, 50);
+          pdf.text('Normal', xPos, yPosition);
+          pdf.setTextColor(33, 33, 33);
+        }
+        yPosition += 6;
+      });
+
+      yPosition += 8;
+
+      // Capture charts if in chart view
+      if (reportContentRef.current && viewMode === 'charts') {
+        const chartsElement = reportContentRef.current.querySelector('.charts-container');
+        if (chartsElement) {
+          try {
+            const canvas = await html2canvas(chartsElement as HTMLElement, {
+              backgroundColor: '#ffffff',
+              scale: 2,
+              logging: false,
+              useCORS: true,
+            });
+            
+            const imgData = canvas.toDataURL('image/png');
+            const imgWidth = contentWidth;
+            const imgHeight = (canvas.height * imgWidth) / canvas.width;
+            
+            if (yPosition + imgHeight > pageHeight - margin) {
+              pdf.addPage();
+              yPosition = margin;
+            }
+            
+            pdf.setFontSize(14);
+            pdf.setFont('helvetica', 'bold');
+            pdf.text('Trend Charts', margin, yPosition);
+            yPosition += 8;
+            
+            pdf.addImage(imgData, 'PNG', margin, yPosition, imgWidth, imgHeight);
+            yPosition += imgHeight + 10;
+          } catch (err) {
+            console.error('Error capturing charts:', err);
+          }
+        }
+      }
+
+      // Readings Table
+      if (yPosition > pageHeight - 50) {
+        pdf.addPage();
+        yPosition = margin;
+      }
+
+      pdf.setFontSize(14);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setTextColor(33, 33, 33);
+      pdf.text('Readings Data', margin, yPosition);
+      yPosition += 8;
+
+      // Table headers
+      const colWidths = [30, 20, 45, 30, 25];
+      const headers = ['Date', 'Time', 'Metric', 'Value', 'Status'];
+      
+      pdf.setFillColor(240, 240, 240);
+      pdf.rect(margin, yPosition - 4, contentWidth, 8, 'F');
+      pdf.setFontSize(9);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setTextColor(60, 60, 60);
+      
+      xPos = margin + 2;
+      headers.forEach((header, idx) => {
+        pdf.text(header, xPos, yPosition);
+        xPos += colWidths[idx];
+      });
+      yPosition += 8;
+
+      // Table rows
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(8);
+      
+      readings.forEach((reading, index) => {
+        if (yPosition > pageHeight - 15) {
+          pdf.addPage();
+          yPosition = margin;
+          
+          // Repeat header on new page
+          pdf.setFillColor(240, 240, 240);
+          pdf.rect(margin, yPosition - 4, contentWidth, 8, 'F');
+          pdf.setFontSize(9);
+          pdf.setFont('helvetica', 'bold');
+          pdf.setTextColor(60, 60, 60);
+          
+          xPos = margin + 2;
+          headers.forEach((header, idx) => {
+            pdf.text(header, xPos, yPosition);
+            xPos += colWidths[idx];
+          });
+          yPosition += 8;
+          pdf.setFont('helvetica', 'normal');
+          pdf.setFontSize(8);
+        }
+
+        const metric = METRICS[reading.metric_id as MetricType];
+        if (!metric) return;
+        
+        const threshold = getMetricThreshold(reading.metric_id as MetricType);
+        const value = Number(reading.value);
+        const isOutOfRange = threshold && (value < threshold.min_value || value > threshold.max_value);
+        const date = new Date(reading.recorded_at);
+        
+        // Alternate row colors
+        if (index % 2 === 0) {
+          pdf.setFillColor(250, 250, 250);
+          pdf.rect(margin, yPosition - 3, contentWidth, 6, 'F');
+        }
+        
+        pdf.setTextColor(33, 33, 33);
+        xPos = margin + 2;
+        pdf.text(format(date, 'MMM d, yyyy'), xPos, yPosition);
+        xPos += colWidths[0];
+        pdf.text(format(date, 'h:mm a'), xPos, yPosition);
+        xPos += colWidths[1];
+        pdf.text(metric.name, xPos, yPosition);
+        xPos += colWidths[2];
+        pdf.text(`${value.toFixed(metric.precision)} ${metric.unit}`, xPos, yPosition);
+        xPos += colWidths[3];
+        
+        if (isOutOfRange) {
+          pdf.setTextColor(200, 100, 0);
+          pdf.text('Out of Range', xPos, yPosition);
+        } else {
+          pdf.setTextColor(50, 150, 50);
+          pdf.text('Normal', xPos, yPosition);
+        }
+        
+        yPosition += 6;
+      });
+
+      // Footer
+      const totalPages = pdf.getNumberOfPages();
+      for (let i = 1; i <= totalPages; i++) {
+        pdf.setPage(i);
+        pdf.setFontSize(8);
+        pdf.setTextColor(150, 150, 150);
+        pdf.text(
+          `Page ${i} of ${totalPages}`,
+          pageWidth / 2,
+          pageHeight - 8,
+          { align: 'center' }
+        );
+        pdf.text(
+          'Generated by Wastewater Process Tracker',
+          margin,
+          pageHeight - 8
+        );
+      }
+
+      // Save the PDF
+      const filename = `wastewater-report-${format(dateRange.from, 'yyyy-MM-dd')}-to-${format(dateRange.to, 'yyyy-MM-dd')}.pdf`;
+      pdf.save(filename);
+      
+      toast.success('PDF report downloaded successfully');
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      toast.error('Failed to generate PDF report');
+    } finally {
+      setExportingPDF(false);
+    }
+  };
+
   if (siteLoading) {
     return (
       <AppLayout>
@@ -359,6 +626,18 @@ export default function Reports() {
                   Export CSV
                 </button>
                 <button
+                  onClick={exportToPDF}
+                  disabled={exportingPDF}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border hover:bg-muted transition-colors text-sm disabled:opacity-50"
+                >
+                  {exportingPDF ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <FileDown className="w-4 h-4" />
+                  )}
+                  Export PDF
+                </button>
+                <button
                   onClick={handlePrint}
                   className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border hover:bg-muted transition-colors text-sm"
                 >
@@ -496,39 +775,41 @@ export default function Reports() {
 
             {/* Charts View */}
             {viewMode === 'charts' && (
-              <div className="space-y-6">
-                {selectedMetric ? (
-                  <div className="bg-card rounded-xl border border-border p-6">
-                    <h3 className="text-lg font-semibold text-foreground mb-4">
-                      {METRICS[selectedMetric].name} Trend
-                    </h3>
-                    <MetricChart
-                      metricId={selectedMetric}
-                      readings={chartReadings}
-                      threshold={chartThresholds.find(t => t.metricId === selectedMetric)}
-                    />
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {Object.keys(METRICS).map(metricId => {
-                      const metricReadings = chartReadings.filter(r => r.metricId === metricId);
-                      if (metricReadings.length === 0) return null;
+              <div ref={reportContentRef} className="space-y-6">
+                <div className="charts-container">
+                  {selectedMetric ? (
+                    <div className="bg-card rounded-xl border border-border p-6">
+                      <h3 className="text-lg font-semibold text-foreground mb-4">
+                        {METRICS[selectedMetric].name} Trend
+                      </h3>
+                      <MetricChart
+                        metricId={selectedMetric}
+                        readings={chartReadings}
+                        threshold={chartThresholds.find(t => t.metricId === selectedMetric)}
+                      />
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      {Object.keys(METRICS).map(metricId => {
+                        const metricReadings = chartReadings.filter(r => r.metricId === metricId);
+                        if (metricReadings.length === 0) return null;
 
-                      return (
-                        <div key={metricId} className="bg-card rounded-xl border border-border p-6">
-                          <h3 className="text-lg font-semibold text-foreground mb-4">
-                            {METRICS[metricId as MetricType].name}
-                          </h3>
-                          <MetricChart
-                            metricId={metricId as MetricType}
-                            readings={chartReadings}
-                            threshold={chartThresholds.find(t => t.metricId === metricId)}
-                          />
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+                        return (
+                          <div key={metricId} className="bg-card rounded-xl border border-border p-6">
+                            <h3 className="text-lg font-semibold text-foreground mb-4">
+                              {METRICS[metricId as MetricType].name}
+                            </h3>
+                            <MetricChart
+                              metricId={metricId as MetricType}
+                              readings={chartReadings}
+                              threshold={chartThresholds.find(t => t.metricId === metricId)}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </>
