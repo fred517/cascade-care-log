@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { ThresholdSettings } from '@/components/settings/ThresholdSettings';
+import { EmailRecipients } from '@/components/settings/EmailRecipients';
 import { mockThresholds } from '@/data/mockData';
 import { Threshold } from '@/types/wastewater';
 import { cn } from '@/lib/utils';
@@ -75,71 +76,11 @@ export default function Settings() {
                   Email Notifications
                 </h2>
                 <p className="text-sm text-muted-foreground">
-                  Configure who receives alerts when thresholds are exceeded.
+                  Manage recipients who will receive alerts when thresholds are exceeded.
                 </p>
               </div>
               
-              <div className="space-y-4">
-                <div className="p-4 rounded-xl border border-border">
-                  <label className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium text-foreground">Email Alerts</p>
-                      <p className="text-sm text-muted-foreground">Send email when thresholds are exceeded</p>
-                    </div>
-                    <input type="checkbox" defaultChecked className="sr-only peer" />
-                    <div className="relative w-11 h-6 bg-muted peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary cursor-pointer"></div>
-                  </label>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">
-                    Primary Recipients
-                  </label>
-                  <input 
-                    type="text" 
-                    placeholder="supervisor@plant.com, manager@plant.com"
-                    className="input-field"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Separate multiple emails with commas
-                  </p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">
-                    Escalation Recipients
-                  </label>
-                  <input 
-                    type="text" 
-                    placeholder="plant-manager@plant.com"
-                    className="input-field"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Notified if alert is not acknowledged within 4 hours
-                  </p>
-                </div>
-
-                <div className="p-4 rounded-xl bg-muted/50">
-                  <p className="text-sm text-muted-foreground mb-2">Quiet Hours</p>
-                  <div className="flex items-center gap-4">
-                    <div className="flex-1">
-                      <label className="text-xs text-muted-foreground">From</label>
-                      <input type="time" defaultValue="22:00" className="input-field mt-1" />
-                    </div>
-                    <div className="flex-1">
-                      <label className="text-xs text-muted-foreground">To</label>
-                      <input type="time" defaultValue="06:00" className="input-field mt-1" />
-                    </div>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Only critical alerts will be sent during quiet hours
-                  </p>
-                </div>
-
-                <button className="btn-primary w-full mt-4">
-                  Save Notification Settings
-                </button>
-              </div>
+              <EmailRecipients />
             </div>
           )}
 
