@@ -53,6 +53,8 @@ export default function Reports() {
   const [viewMode, setViewMode] = useState<ViewMode>('table');
   const [selectedMetric, setSelectedMetric] = useState<MetricType | null>(null);
   const [exportingPDF, setExportingPDF] = useState(false);
+  const [reportNotes, setReportNotes] = useState('');
+  const [reportTitle, setReportTitle] = useState('');
   const reportContentRef = useRef<HTMLDivElement>(null);
 
   // Fetch readings for date range
@@ -235,7 +237,7 @@ export default function Reports() {
       pdf.setFontSize(20);
       pdf.setFont('helvetica', 'bold');
       pdf.setTextColor(33, 33, 33);
-      pdf.text('Wastewater Process Report', margin, yPosition);
+      pdf.text(reportTitle || 'Wastewater Process Report', margin, yPosition);
       yPosition += 10;
 
       // Site and date info
@@ -248,6 +250,35 @@ export default function Reports() {
       yPosition += 6;
       pdf.text(`Generated: ${format(new Date(), 'MMMM d, yyyy h:mm a')} by ${profile?.display_name || 'Operator'}`, margin, yPosition);
       yPosition += 10;
+
+      // Custom Notes Section (if provided)
+      if (reportNotes.trim()) {
+        pdf.setDrawColor(200, 200, 200);
+        pdf.line(margin, yPosition, pageWidth - margin, yPosition);
+        yPosition += 8;
+
+        pdf.setFontSize(12);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setTextColor(33, 33, 33);
+        pdf.text('Notes & Comments', margin, yPosition);
+        yPosition += 6;
+
+        pdf.setFontSize(10);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setTextColor(60, 60, 60);
+        
+        // Split notes into lines that fit the page width
+        const notesLines = pdf.splitTextToSize(reportNotes.trim(), contentWidth - 4);
+        notesLines.forEach((line: string) => {
+          if (yPosition > pageHeight - 30) {
+            pdf.addPage();
+            yPosition = margin;
+          }
+          pdf.text(line, margin + 2, yPosition);
+          yPosition += 5;
+        });
+        yPosition += 4;
+      }
 
       // Divider line
       pdf.setDrawColor(200, 200, 200);
@@ -570,6 +601,44 @@ export default function Reports() {
                   </>
                 )}
               </button>
+            </div>
+          </div>
+
+          {/* Custom Report Options */}
+          <div className="mt-6 pt-6 border-t border-border">
+            <h3 className="text-sm font-medium text-foreground mb-4">Report Customization (Optional)</h3>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Custom Report Title
+                </label>
+                <input
+                  type="text"
+                  value={reportTitle}
+                  onChange={(e) => setReportTitle(e.target.value)}
+                  placeholder="Wastewater Process Report"
+                  className="input-field"
+                  maxLength={100}
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Leave blank to use default title
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Notes & Comments
+                </label>
+                <textarea
+                  value={reportNotes}
+                  onChange={(e) => setReportNotes(e.target.value)}
+                  placeholder="Add any notes, observations, or comments to include in the PDF report..."
+                  className="input-field min-h-[80px] resize-y"
+                  maxLength={2000}
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  {reportNotes.length}/2000 characters
+                </p>
+              </div>
             </div>
           </div>
         </div>
