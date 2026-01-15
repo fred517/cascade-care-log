@@ -115,21 +115,22 @@ export function useReadings() {
   };
 
   const addMultipleReadings = async (
-    readingsData: { metricId: MetricType; value: number; notes?: string }[]
+    readingsData: { metricId: MetricType; value: number; notes?: string }[],
+    recordedAt?: Date
   ) => {
     if (!site || !user) {
       toast.error('No site or user available');
       return [];
     }
 
-    const now = new Date().toISOString();
+    const timestamp = (recordedAt || new Date()).toISOString();
     const insertData = readingsData.map(r => ({
       site_id: site.id,
       metric_id: r.metricId,
       value: r.value,
       notes: r.notes || null,
       entered_by: user.id,
-      recorded_at: now,
+      recorded_at: timestamp,
     }));
 
     try {
@@ -147,6 +148,18 @@ export function useReadings() {
       toast.error('Failed to save readings');
       return [];
     }
+  };
+
+  // Get readings for a specific date
+  const getReadingsForDate = (date: Date) => {
+    const targetDate = new Date(date);
+    targetDate.setHours(0, 0, 0, 0);
+    
+    return readings.filter(r => {
+      const readingDate = new Date(r.recorded_at);
+      readingDate.setHours(0, 0, 0, 0);
+      return readingDate.getTime() === targetDate.getTime();
+    });
   };
 
   const updateThreshold = async (
@@ -240,6 +253,7 @@ export function useReadings() {
     getMetricReadings,
     getMetricThreshold,
     getTodayReadings,
+    getReadingsForDate,
     refetch: () => Promise.all([fetchReadings(), fetchThresholds()]),
   };
 }
