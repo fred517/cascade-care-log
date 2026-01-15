@@ -1,20 +1,60 @@
 import { useState } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { ReadingForm } from '@/components/readings/ReadingForm';
-import { Reading } from '@/types/wastewater';
-import { mockThresholds } from '@/data/mockData';
-import { Clock } from 'lucide-react';
+import { Reading, MetricType, Threshold } from '@/types/wastewater';
+import { useReadings } from '@/hooks/useReadings';
+import { useSite } from '@/hooks/useSite';
+import { Clock, Loader2 } from 'lucide-react';
 
 export default function Readings() {
+  const { site, loading: siteLoading } = useSite();
+  const { thresholds, addMultipleReadings, loading: readingsLoading } = useReadings();
   const [recentSubmissions, setRecentSubmissions] = useState<Reading[]>([]);
 
-  const handleSubmit = (readings: Omit<Reading, 'id'>[]) => {
-    const newReadings = readings.map((r, index) => ({
-      ...r,
-      id: `new-${Date.now()}-${index}`,
+  const handleSubmit = async (readings: Omit<Reading, 'id'>[]) => {
+    // Convert to the format expected by addMultipleReadings
+    const readingsData = readings.map(r => ({
+      metricId: r.metricId,
+      value: r.value,
+      notes: r.notes,
     }));
+
+    const savedReadings = await addMultipleReadings(readingsData);
+    
+    // Update recent submissions for display
+    const newReadings = savedReadings.map((r, index) => ({
+      id: r.id,
+      metricId: r.metric_id as MetricType,
+      value: Number(r.value),
+      timestamp: new Date(r.recorded_at),
+      enteredBy: 'You',
+      siteId: r.site_id,
+      notes: r.notes || undefined,
+    }));
+    
     setRecentSubmissions(prev => [...newReadings, ...prev].slice(0, 10));
   };
+
+  // Convert thresholds to the format expected by ReadingForm
+  const formThresholds: Threshold[] = thresholds.map(t => ({
+    metricId: t.metric_id as MetricType,
+    min: t.min_value,
+    max: t.max_value,
+    enabled: t.enabled,
+    siteId: t.site_id,
+  }));
+
+  const loading = siteLoading || readingsLoading;
+
+  if (loading) {
+    return (
+      <AppLayout>
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout>
@@ -24,6 +64,7 @@ export default function Readings() {
           <h1 className="text-3xl font-bold text-foreground mb-2">Add Daily Readings</h1>
           <p className="text-muted-foreground">
             Enter today's process measurements for all metrics
+            {site && <span className="ml-1">at {site.name}</span>}
           </p>
         </div>
 
@@ -45,7 +86,7 @@ export default function Readings() {
         </div>
 
         {/* Form */}
-        <ReadingForm onSubmit={handleSubmit} thresholds={mockThresholds} />
+        <ReadingForm onSubmit={handleSubmit} thresholds={formThresholds} />
 
         {/* Recent Submissions */}
         {recentSubmissions.length > 0 && (

@@ -1,6 +1,6 @@
 export type MetricType = 'svi' | 'ph' | 'do' | 'orp' | 'mlss' | 'ammonia';
 
-export type AlertSeverity = 'low' | 'high' | 'critical';
+export type AlertSeverity = 'low' | 'medium' | 'high' | 'critical' | 'warning';
 export type AlertStatus = 'active' | 'acknowledged' | 'resolved';
 
 export interface Metric {

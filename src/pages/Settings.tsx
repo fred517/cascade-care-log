@@ -1,17 +1,77 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
-import { ThresholdSettings } from '@/components/settings/ThresholdSettings';
 import { EmailRecipients } from '@/components/settings/EmailRecipients';
-import { mockThresholds } from '@/data/mockData';
-import { Threshold } from '@/types/wastewater';
+import { Threshold, MetricType, METRICS } from '@/types/wastewater';
+import { useReadings } from '@/hooks/useReadings';
+import { useSite } from '@/hooks/useSite';
+import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
-import { Sliders, Bell, Users, Building2 } from 'lucide-react';
+import { Sliders, Bell, Users, Building2, Check, RotateCcw, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 type SettingsTab = 'thresholds' | 'notifications' | 'team' | 'site';
 
 export default function Settings() {
+  const { site, loading: siteLoading } = useSite();
+  const { thresholds, updateThreshold, loading: readingsLoading } = useReadings();
   const [activeTab, setActiveTab] = useState<SettingsTab>('thresholds');
-  const [thresholds, setThresholds] = useState<Threshold[]>(mockThresholds);
+  const [localThresholds, setLocalThresholds] = useState<Record<MetricType, { min: number; max: number; enabled: boolean }>>({
+    svi: { min: 50, max: 150, enabled: true },
+    ph: { min: 6.5, max: 8.5, enabled: true },
+    do: { min: 2.0, max: 6.0, enabled: true },
+    orp: { min: -50, max: 200, enabled: true },
+    mlss: { min: 2000, max: 4000, enabled: true },
+    ammonia: { min: 0, max: 5, enabled: true },
+  });
+  const [isSaving, setIsSaving] = useState(false);
+  const [teamMembers, setTeamMembers] = useState<any[]>([]);
+
+  // Initialize local thresholds from database
+  useEffect(() => {
+    if (thresholds.length > 0) {
+      const newLocal = { ...localThresholds };
+      thresholds.forEach(t => {
+        const metricId = t.metric_id as MetricType;
+        if (metricId in newLocal) {
+          newLocal[metricId] = {
+            min: t.min_value,
+            max: t.max_value,
+            enabled: t.enabled,
+          };
+        }
+      });
+      setLocalThresholds(newLocal);
+    }
+  }, [thresholds]);
+
+  // Fetch team members
+  useEffect(() => {
+    const fetchTeam = async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select(`
+          id,
+          user_id,
+          display_name,
+          email
+        `)
+        .limit(20);
+
+      if (data) {
+        // Get roles for each user
+        const membersWithRoles = await Promise.all(
+          data.map(async (member) => {
+            const { data: roleData } = await supabase
+              .rpc('get_user_role', { _user_id: member.user_id });
+            return { ...member, role: roleData || 'operator' };
+          })
+        );
+        setTeamMembers(membersWithRoles);
+      }
+    };
+
+    fetchTeam();
+  }, []);
 
   const tabs = [
     { key: 'thresholds' as const, label: 'Thresholds', icon: Sliders },
@@ -19,6 +79,47 @@ export default function Settings() {
     { key: 'team' as const, label: 'Team', icon: Users },
     { key: 'site' as const, label: 'Site', icon: Building2 },
   ];
+
+  const handleThresholdChange = (metricId: MetricType, field: 'min' | 'max' | 'enabled', value: number | boolean) => {
+    setLocalThresholds(prev => ({
+      ...prev,
+      [metricId]: { ...prev[metricId], [field]: value },
+    }));
+  };
+
+  const handleResetThreshold = (metricId: MetricType) => {
+    const metric = METRICS[metricId];
+    setLocalThresholds(prev => ({
+      ...prev,
+      [metricId]: { min: metric.defaultMin, max: metric.defaultMax, enabled: true },
+    }));
+  };
+
+  const handleSaveThresholds = async () => {
+    setIsSaving(true);
+    try {
+      for (const [metricId, values] of Object.entries(localThresholds)) {
+        await updateThreshold(metricId, values.min, values.max, values.enabled);
+      }
+      toast.success('Thresholds saved successfully');
+    } catch (error) {
+      toast.error('Failed to save thresholds');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const loading = siteLoading || readingsLoading;
+
+  if (loading) {
+    return (
+      <AppLayout>
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout>
@@ -28,6 +129,7 @@ export default function Settings() {
           <h1 className="text-3xl font-bold text-foreground mb-2">Settings</h1>
           <p className="text-muted-foreground">
             Configure thresholds, notifications, and site preferences
+            {site && <span className="ml-1">for {site.name}</span>}
           </p>
         </div>
 
@@ -62,10 +164,106 @@ export default function Settings() {
                   Set minimum and maximum values for each metric. Alerts will trigger when readings fall outside these ranges.
                 </p>
               </div>
-              <ThresholdSettings 
-                thresholds={thresholds} 
-                onSave={setThresholds} 
-              />
+              
+              <div className="space-y-4">
+                {Object.values(METRICS).map(metric => {
+                  const threshold = localThresholds[metric.id];
+                  const isModified = 
+                    threshold.min !== metric.defaultMin || 
+                    threshold.max !== metric.defaultMax;
+
+                  return (
+                    <div 
+                      key={metric.id}
+                      className={cn(
+                        "p-4 rounded-xl border transition-all duration-300",
+                        threshold.enabled 
+                          ? "bg-card border-border" 
+                          : "bg-muted/30 border-muted"
+                      )}
+                    >
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={threshold.enabled}
+                              onChange={(e) => handleThresholdChange(metric.id, 'enabled', e.target.checked)}
+                              className="sr-only peer"
+                            />
+                            <div className="w-11 h-6 bg-muted peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                          </label>
+                          <div>
+                            <h3 className="font-semibold text-foreground">{metric.name}</h3>
+                            <p className="text-sm text-muted-foreground">
+                              Default: {metric.defaultMin} - {metric.defaultMax} {metric.unit}
+                            </p>
+                          </div>
+                        </div>
+
+                        {isModified && (
+                          <button
+                            onClick={() => handleResetThreshold(metric.id)}
+                            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                          >
+                            <RotateCcw className="w-3 h-3" />
+                            Reset
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm text-muted-foreground mb-1">
+                            Minimum {metric.unit && `(${metric.unit})`}
+                          </label>
+                          <input
+                            type="number"
+                            step={metric.precision > 0 ? Math.pow(10, -metric.precision) : 1}
+                            value={threshold.min}
+                            onChange={(e) => handleThresholdChange(metric.id, 'min', parseFloat(e.target.value) || 0)}
+                            disabled={!threshold.enabled}
+                            className="input-field font-mono disabled:opacity-50"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm text-muted-foreground mb-1">
+                            Maximum {metric.unit && `(${metric.unit})`}
+                          </label>
+                          <input
+                            type="number"
+                            step={metric.precision > 0 ? Math.pow(10, -metric.precision) : 1}
+                            value={threshold.max}
+                            onChange={(e) => handleThresholdChange(metric.id, 'max', parseFloat(e.target.value) || 0)}
+                            disabled={!threshold.enabled}
+                            className="input-field font-mono disabled:opacity-50"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="flex justify-end mt-6">
+                <button
+                  onClick={handleSaveThresholds}
+                  disabled={isSaving}
+                  className="flex items-center gap-2 btn-primary disabled:opacity-50"
+                >
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4" />
+                      Save Thresholds
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           )}
 
@@ -91,41 +289,39 @@ export default function Settings() {
                   Team Management
                 </h2>
                 <p className="text-sm text-muted-foreground">
-                  Manage operators and their access levels.
+                  View team members and their access levels.
                 </p>
               </div>
               
               <div className="space-y-3">
-                {[
-                  { name: 'John Operator', email: 'john@plant.com', role: 'Operator' },
-                  { name: 'Jane Supervisor', email: 'jane@plant.com', role: 'Supervisor' },
-                  { name: 'Admin User', email: 'admin@plant.com', role: 'Admin' },
-                ].map((user) => (
-                  <div key={user.email} className="flex items-center justify-between p-4 rounded-xl border border-border">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-semibold">
-                        {user.name.split(' ').map(n => n[0]).join('')}
+                {teamMembers.length === 0 ? (
+                  <p className="text-center py-8 text-muted-foreground">
+                    No team members found
+                  </p>
+                ) : (
+                  teamMembers.map((member) => (
+                    <div key={member.id} className="flex items-center justify-between p-4 rounded-xl border border-border">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-semibold">
+                          {(member.display_name || 'U').split(' ').map((n: string) => n[0]).join('').toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="font-medium text-foreground">{member.display_name || 'Unknown'}</p>
+                          <p className="text-sm text-muted-foreground">{member.email}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-medium text-foreground">{user.name}</p>
-                        <p className="text-sm text-muted-foreground">{user.email}</p>
-                      </div>
+                      <span className={cn(
+                        "px-3 py-1 rounded-full text-xs font-medium capitalize",
+                        member.role === 'admin' ? "bg-primary/20 text-primary" :
+                        member.role === 'supervisor' ? "bg-status-info/20 text-status-info" :
+                        "bg-muted text-muted-foreground"
+                      )}>
+                        {member.role}
+                      </span>
                     </div>
-                    <span className={cn(
-                      "px-3 py-1 rounded-full text-xs font-medium",
-                      user.role === 'Admin' ? "bg-primary/20 text-primary" :
-                      user.role === 'Supervisor' ? "bg-status-info/20 text-status-info" :
-                      "bg-muted text-muted-foreground"
-                    )}>
-                      {user.role}
-                    </span>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
-
-              <button className="mt-4 px-4 py-2 rounded-lg border border-dashed border-border text-muted-foreground hover:text-foreground hover:border-primary transition-colors w-full">
-                + Add Team Member
-              </button>
             </div>
           )}
 
@@ -136,7 +332,7 @@ export default function Settings() {
                   Site Configuration
                 </h2>
                 <p className="text-sm text-muted-foreground">
-                  Configure site details and preferences.
+                  View site details and preferences.
                 </p>
               </div>
               
@@ -147,8 +343,9 @@ export default function Settings() {
                   </label>
                   <input 
                     type="text" 
-                    defaultValue="Main Treatment Plant"
-                    className="input-field"
+                    value={site?.name || 'Main Treatment Plant'}
+                    readOnly
+                    className="input-field bg-muted/50"
                   />
                 </div>
 
@@ -156,27 +353,29 @@ export default function Settings() {
                   <label className="block text-sm font-medium text-foreground mb-2">
                     Timezone
                   </label>
-                  <select className="input-field">
-                    <option value="America/New_York">Eastern Time (ET)</option>
-                    <option value="America/Chicago">Central Time (CT)</option>
-                    <option value="America/Denver">Mountain Time (MT)</option>
-                    <option value="America/Los_Angeles">Pacific Time (PT)</option>
-                  </select>
+                  <input 
+                    type="text" 
+                    value={site?.timezone || 'America/New_York'}
+                    readOnly
+                    className="input-field bg-muted/50"
+                  />
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-foreground mb-2">
                     Ammonia Reporting Basis
                   </label>
-                  <select className="input-field">
-                    <option value="nh3n">NH₃-N (Ammonia Nitrogen)</option>
-                    <option value="nh4n">NH₄-N (Ammonium Nitrogen)</option>
-                  </select>
+                  <input 
+                    type="text" 
+                    value={site?.ammonia_basis === 'nh4n' ? 'NH₄-N (Ammonium Nitrogen)' : 'NH₃-N (Ammonia Nitrogen)'}
+                    readOnly
+                    className="input-field bg-muted/50"
+                  />
                 </div>
 
-                <button className="btn-primary w-full mt-4">
-                  Save Site Settings
-                </button>
+                <p className="text-xs text-muted-foreground mt-4">
+                  Contact an administrator to change site settings.
+                </p>
               </div>
             </div>
           )}
