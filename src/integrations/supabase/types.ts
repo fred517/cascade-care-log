@@ -176,6 +176,153 @@ export type Database = {
         }
         Relationships: []
       }
+      readings: {
+        Row: {
+          attachment_url: string | null
+          created_at: string
+          entered_by: string
+          id: string
+          metric_id: string
+          notes: string | null
+          recorded_at: string
+          site_id: string
+          updated_at: string
+          value: number
+        }
+        Insert: {
+          attachment_url?: string | null
+          created_at?: string
+          entered_by: string
+          id?: string
+          metric_id: string
+          notes?: string | null
+          recorded_at?: string
+          site_id: string
+          updated_at?: string
+          value: number
+        }
+        Update: {
+          attachment_url?: string | null
+          created_at?: string
+          entered_by?: string
+          id?: string
+          metric_id?: string
+          notes?: string | null
+          recorded_at?: string
+          site_id?: string
+          updated_at?: string
+          value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "readings_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      site_members: {
+        Row: {
+          created_at: string
+          id: string
+          site_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          site_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          site_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "site_members_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sites: {
+        Row: {
+          ammonia_basis: string | null
+          created_at: string
+          id: string
+          name: string
+          timezone: string | null
+          updated_at: string
+        }
+        Insert: {
+          ammonia_basis?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          timezone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          ammonia_basis?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          timezone?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      thresholds: {
+        Row: {
+          created_at: string
+          effective_from: string | null
+          enabled: boolean | null
+          id: string
+          max_value: number
+          metric_id: string
+          min_value: number
+          site_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          effective_from?: string | null
+          enabled?: boolean | null
+          id?: string
+          max_value: number
+          metric_id: string
+          min_value: number
+          site_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          effective_from?: string | null
+          enabled?: boolean | null
+          id?: string
+          max_value?: number
+          metric_id?: string
+          min_value?: number
+          site_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "thresholds_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -211,6 +358,10 @@ export type Database = {
           _role: Database["public"]["Enums"]["app_role"]
           _user_id: string
         }
+        Returns: boolean
+      }
+      is_site_member: {
+        Args: { _site_id: string; _user_id: string }
         Returns: boolean
       }
     }
