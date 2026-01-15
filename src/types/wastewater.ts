@@ -22,6 +22,7 @@ export interface Reading {
   enteredBy: string;
   notes?: string;
   siteId: string;
+  attachmentUrl?: string;
 }
 
 export interface Threshold {

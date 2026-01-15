@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { METRICS, MetricType, Reading, Threshold } from '@/types/wastewater';
-import { Check, ChevronRight, Info, AlertTriangle } from 'lucide-react';
+import { Check, ChevronRight, Info, AlertTriangle, Paperclip, X, FileText, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useAlertEmail } from '@/hooks/useAlertEmail';
@@ -9,11 +9,18 @@ import { mockPlaybooks } from '@/data/mockData';
 interface ReadingFormProps {
   onSubmit: (readings: Omit<Reading, 'id'>[]) => void;
   thresholds?: Threshold[];
+  onUploadFile?: (file: File) => Promise<string | null>;
 }
 
 const metricOrder: MetricType[] = ['svi', 'ph', 'do', 'orp', 'mlss', 'ammonia'];
 
-export function ReadingForm({ onSubmit, thresholds = [] }: ReadingFormProps) {
+interface AttachmentInfo {
+  file: File;
+  preview?: string;
+  url?: string;
+}
+
+export function ReadingForm({ onSubmit, thresholds = [], onUploadFile }: ReadingFormProps) {
   const [values, setValues] = useState<Record<MetricType, string>>({
     svi: '',
     ph: '',
@@ -30,9 +37,19 @@ export function ReadingForm({ onSubmit, thresholds = [] }: ReadingFormProps) {
     mlss: '',
     ammonia: '',
   });
+  const [attachments, setAttachments] = useState<Record<MetricType, AttachmentInfo | null>>({
+    svi: null,
+    ph: null,
+    do: null,
+    orp: null,
+    mlss: null,
+    ammonia: null,
+  });
   const [currentStep, setCurrentStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [uploadingMetric, setUploadingMetric] = useState<MetricType | null>(null);
   const { checkThresholds } = useAlertEmail();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Get threshold for a metric
   const getThreshold = (metricId: MetricType): Threshold | undefined => {
@@ -69,6 +86,65 @@ export function ReadingForm({ onSubmit, thresholds = [] }: ReadingFormProps) {
     setNotes(prev => ({ ...prev, [metricId]: note }));
   };
 
+  const handleFileSelect = async (metricId: MetricType, file: File) => {
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'];
+    if (!allowedTypes.includes(file.type)) {
+      toast.error('Only images (JPEG, PNG, GIF, WebP) and PDF files are allowed');
+      return;
+    }
+
+    // Validate file size (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('File size must be less than 10MB');
+      return;
+    }
+
+    // Create preview for images
+    let preview: string | undefined;
+    if (file.type.startsWith('image/')) {
+      preview = URL.createObjectURL(file);
+    }
+
+    // If we have an upload function, upload immediately
+    if (onUploadFile) {
+      setUploadingMetric(metricId);
+      const url = await onUploadFile(file);
+      setUploadingMetric(null);
+      
+      if (url) {
+        setAttachments(prev => ({ ...prev, [metricId]: { file, preview, url } }));
+        toast.success('File uploaded successfully');
+      }
+    } else {
+      setAttachments(prev => ({ ...prev, [metricId]: { file, preview } }));
+    }
+  };
+
+  const handleRemoveAttachment = (metricId: MetricType) => {
+    const attachment = attachments[metricId];
+    if (attachment?.preview) {
+      URL.revokeObjectURL(attachment.preview);
+    }
+    setAttachments(prev => ({ ...prev, [metricId]: null }));
+  };
+
+  const triggerFileInput = (metricId: MetricType) => {
+    if (fileInputRef.current) {
+      fileInputRef.current.dataset.metric = metricId;
+      fileInputRef.current.click();
+    }
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    const metricId = e.target.dataset.metric as MetricType;
+    if (file && metricId) {
+      handleFileSelect(metricId, file);
+    }
+    e.target.value = '';
+  };
+
   const handleSubmit = async () => {
     setIsSubmitting(true);
     
@@ -79,6 +155,7 @@ export function ReadingForm({ onSubmit, thresholds = [] }: ReadingFormProps) {
     metricOrder.forEach(metricId => {
       const value = parseFloat(values[metricId]);
       if (!isNaN(value)) {
+        const attachment = attachments[metricId];
         readings.push({
           metricId,
           value,
@@ -86,6 +163,7 @@ export function ReadingForm({ onSubmit, thresholds = [] }: ReadingFormProps) {
           enteredBy: 'Current Operator',
           siteId: 'site-1',
           notes: notes[metricId] || undefined,
+          attachmentUrl: attachment?.url,
         });
 
         // Check for threshold violations
@@ -136,9 +214,15 @@ export function ReadingForm({ onSubmit, thresholds = [] }: ReadingFormProps) {
     
     toast.success(`${readings.length} reading${readings.length > 1 ? 's' : ''} saved successfully`);
     
+    // Cleanup previews
+    Object.values(attachments).forEach(att => {
+      if (att?.preview) URL.revokeObjectURL(att.preview);
+    });
+    
     // Reset form
     setValues({ svi: '', ph: '', do: '', orp: '', mlss: '', ammonia: '' });
     setNotes({ svi: '', ph: '', do: '', orp: '', mlss: '', ammonia: '' });
+    setAttachments({ svi: null, ph: null, do: null, orp: null, mlss: null, ammonia: null });
     setCurrentStep(0);
     setIsSubmitting(false);
   };
@@ -146,9 +230,20 @@ export function ReadingForm({ onSubmit, thresholds = [] }: ReadingFormProps) {
   const completedCount = metricOrder.filter(m => values[m] !== '').length;
   const currentMetric = metricOrder[currentStep];
   const metric = METRICS[currentMetric];
+  const currentAttachment = attachments[currentMetric];
+  const isUploadingCurrent = uploadingMetric === currentMetric;
 
   return (
     <div className="max-w-2xl mx-auto">
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/gif,image/webp,application/pdf"
+        onChange={handleFileInputChange}
+        className="hidden"
+      />
+
       {/* Progress indicator */}
       <div className="flex items-center gap-2 mb-8">
         {metricOrder.map((m, index) => (
@@ -223,6 +318,72 @@ export function ReadingForm({ onSubmit, thresholds = [] }: ReadingFormProps) {
           />
         </div>
 
+        {/* Attachment section */}
+        <div className="mb-6">
+          <label className="block text-sm text-muted-foreground mb-2">
+            Attachment (optional)
+          </label>
+          
+          {currentAttachment ? (
+            <div className="relative border border-border rounded-lg p-3 bg-muted/30">
+              <div className="flex items-center gap-3">
+                {currentAttachment.preview ? (
+                  <img 
+                    src={currentAttachment.preview} 
+                    alt="Attachment preview" 
+                    className="w-16 h-16 object-cover rounded-lg"
+                  />
+                ) : (
+                  <div className="w-16 h-16 flex items-center justify-center bg-muted rounded-lg">
+                    <FileText className="w-8 h-8 text-muted-foreground" />
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{currentAttachment.file.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {(currentAttachment.file.size / 1024).toFixed(1)} KB
+                    {currentAttachment.url && (
+                      <span className="text-status-normal ml-2">• Uploaded</span>
+                    )}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveAttachment(currentMetric)}
+                  className="p-1 rounded-full hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => triggerFileInput(currentMetric)}
+              disabled={isUploadingCurrent}
+              className={cn(
+                "w-full border-2 border-dashed border-border rounded-lg p-4 flex items-center justify-center gap-2 text-muted-foreground hover:border-primary hover:text-primary transition-colors",
+                isUploadingCurrent && "opacity-50 cursor-not-allowed"
+              )}
+            >
+              {isUploadingCurrent ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span>Uploading...</span>
+                </>
+              ) : (
+                <>
+                  <Paperclip className="w-5 h-5" />
+                  <span>Add photo or document</span>
+                </>
+              )}
+            </button>
+          )}
+          <p className="text-xs text-muted-foreground mt-2">
+            Supports JPEG, PNG, GIF, WebP, and PDF (max 10MB)
+          </p>
+        </div>
+
         {/* Quick navigation */}
         <div className="flex items-center gap-2">
           {currentStep > 0 && (
@@ -273,6 +434,7 @@ export function ReadingForm({ onSubmit, thresholds = [] }: ReadingFormProps) {
           {metricOrder.map((m, index) => {
             const met = METRICS[m];
             const hasValue = values[m] !== '';
+            const hasAttachment = attachments[m] !== null;
             
             return (
               <button
@@ -287,7 +449,10 @@ export function ReadingForm({ onSubmit, thresholds = [] }: ReadingFormProps) {
               >
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-sm font-medium">{met.name}</span>
-                  {hasValue && <Check className="w-4 h-4 text-status-normal" />}
+                  <div className="flex items-center gap-1">
+                    {hasAttachment && <Paperclip className="w-3 h-3 text-muted-foreground" />}
+                    {hasValue && <Check className="w-4 h-4 text-status-normal" />}
+                  </div>
                 </div>
                 <span className="text-lg font-mono">
                   {hasValue ? `${values[m]} ${met.unit}` : '--'}
