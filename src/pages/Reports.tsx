@@ -778,7 +778,8 @@ export default function Reports() {
         {/* Comparison Tab Content */}
         {activeTab === 'comparison' && site && (
           <ReportComparison 
-            siteId={site.id} 
+            siteId={site.id}
+            siteName={site.name}
             getMetricThreshold={getMetricThreshold}
           />
         )}
