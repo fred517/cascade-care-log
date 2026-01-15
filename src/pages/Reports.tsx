@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { MetricChart } from '@/components/charts/MetricChart';
+import { ReportComparison } from '@/components/reports/ReportComparison';
 import { useReadings } from '@/hooks/useReadings';
 import { useSite } from '@/hooks/useSite';
 import { useAuth } from '@/hooks/useAuth';
@@ -24,7 +25,8 @@ import {
   Trash2,
   X,
   Share2,
-  Check
+  Check,
+  GitCompare
 } from 'lucide-react';
 import { format, subDays, startOfDay, endOfDay } from 'date-fns';
 import { toast } from 'sonner';
@@ -32,6 +34,7 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
 type ViewMode = 'table' | 'charts';
+type ReportTab = 'standard' | 'comparison';
 
 interface DateRange {
   from: Date;
@@ -69,6 +72,7 @@ export default function Reports() {
   const { site, loading: siteLoading } = useSite();
   const { thresholds, getMetricThreshold } = useReadings();
   
+  const [activeTab, setActiveTab] = useState<ReportTab>('standard');
   const [dateRange, setDateRange] = useState<DateRange>({
     from: subDays(new Date(), 7),
     to: new Date(),
@@ -716,37 +720,78 @@ export default function Reports() {
                 Generate reports for readings and trends within a selected date range
               </p>
             </div>
-            <div className="flex items-center gap-2 print:hidden">
-              <button
-                onClick={() => setShowLoadModal(true)}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border hover:bg-muted transition-colors text-sm"
-              >
-                <FolderOpen className="w-4 h-4" />
-                Load Template
-              </button>
-              <button
-                onClick={() => {
-                  setEditingTemplateId(null);
-                  setTemplateName('');
-                  setTemplateDescription('');
-                  setTemplateIsShared(false);
-                  setShowSaveModal(true);
-                }}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors text-sm"
-              >
-                <Save className="w-4 h-4" />
-                Save as Template
-              </button>
-            </div>
+            {activeTab === 'standard' && (
+              <div className="flex items-center gap-2 print:hidden">
+                <button
+                  onClick={() => setShowLoadModal(true)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border hover:bg-muted transition-colors text-sm"
+                >
+                  <FolderOpen className="w-4 h-4" />
+                  Load Template
+                </button>
+                <button
+                  onClick={() => {
+                    setEditingTemplateId(null);
+                    setTemplateName('');
+                    setTemplateDescription('');
+                    setTemplateIsShared(false);
+                    setShowSaveModal(true);
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors text-sm"
+                >
+                  <Save className="w-4 h-4" />
+                  Save as Template
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Date Range Selection */}
-        <div className="bg-card rounded-xl border border-border p-6 mb-6 print:hidden">
-          <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
-            <Calendar className="w-5 h-5 text-primary" />
-            Select Date Range
-          </h2>
+        {/* Report Type Tabs */}
+        <div className="flex items-center gap-2 mb-6 print:hidden">
+          <button
+            onClick={() => setActiveTab('standard')}
+            className={cn(
+              "flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-colors",
+              activeTab === 'standard'
+                ? "bg-primary text-primary-foreground shadow-md"
+                : "bg-card border border-border hover:bg-muted text-foreground"
+            )}
+          >
+            <FileText className="w-4 h-4" />
+            Standard Report
+          </button>
+          <button
+            onClick={() => setActiveTab('comparison')}
+            className={cn(
+              "flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-colors",
+              activeTab === 'comparison'
+                ? "bg-primary text-primary-foreground shadow-md"
+                : "bg-card border border-border hover:bg-muted text-foreground"
+            )}
+          >
+            <GitCompare className="w-4 h-4" />
+            Period Comparison
+          </button>
+        </div>
+
+        {/* Comparison Tab Content */}
+        {activeTab === 'comparison' && site && (
+          <ReportComparison 
+            siteId={site.id} 
+            getMetricThreshold={getMetricThreshold}
+          />
+        )}
+
+        {/* Standard Report Content */}
+        {activeTab === 'standard' && (
+          <>
+            {/* Date Range Selection */}
+            <div className="bg-card rounded-xl border border-border p-6 mb-6 print:hidden">
+              <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-primary" />
+                Select Date Range
+              </h2>
 
           {/* Preset buttons */}
           <div className="flex flex-wrap gap-2 mb-4">
@@ -1092,19 +1137,20 @@ export default function Reports() {
           </>
         )}
 
-        {/* Empty State */}
-        {readings.length === 0 && !loading && (
-          <div className="bg-card rounded-xl border border-border p-12 text-center">
-            <FileText className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-            <h3 className="text-lg font-semibold text-foreground mb-2">No Report Generated</h3>
-            <p className="text-muted-foreground mb-4">
-              Select a date range and click "Generate Report" to view readings and trends.
-            </p>
-          </div>
+            {/* Empty State */}
+            {readings.length === 0 && !loading && (
+              <div className="bg-card rounded-xl border border-border p-12 text-center">
+                <FileText className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+                <h3 className="text-lg font-semibold text-foreground mb-2">No Report Generated</h3>
+                <p className="text-muted-foreground mb-4">
+                  Select a date range and click "Generate Report" to view readings and trends.
+                </p>
+              </div>
+            )}
+          </>
         )}
       </div>
 
-      {/* Save Template Modal */}
       {showSaveModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
           <div className="bg-card rounded-xl border border-border shadow-xl w-full max-w-md mx-4">
