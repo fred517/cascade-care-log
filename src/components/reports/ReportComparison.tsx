@@ -1,5 +1,6 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 import { METRICS, MetricType } from '@/types/wastewater';
 import { cn } from '@/lib/utils';
 import { 
@@ -12,7 +13,16 @@ import {
   ChevronLeft,
   ChevronRight,
   BarChart3,
-  FileDown
+  FileDown,
+  MessageSquarePlus,
+  AlertTriangle,
+  Info,
+  AlertCircle,
+  X,
+  Check,
+  Trash2,
+  Edit2,
+  CheckCircle
 } from 'lucide-react';
 import { 
   format, 
@@ -71,6 +81,25 @@ interface MetricComparisonStats {
   trend: 'up' | 'down' | 'stable';
 }
 
+type AnnotationSeverity = 'info' | 'warning' | 'critical';
+
+interface Annotation {
+  id: string;
+  site_id: string;
+  user_id: string;
+  metric_id: string;
+  comparison_type: string;
+  period_start: string;
+  period_end: string;
+  note: string;
+  severity: AnnotationSeverity;
+  is_resolved: boolean;
+  resolved_at: string | null;
+  resolved_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 interface ReportComparisonProps {
   siteId: string;
   siteName?: string;
@@ -78,6 +107,7 @@ interface ReportComparisonProps {
 }
 
 export function ReportComparison({ siteId, siteName, getMetricThreshold }: ReportComparisonProps) {
+  const { user } = useAuth();
   const [comparisonType, setComparisonType] = useState<ComparisonType>('week');
   const [referenceDate, setReferenceDate] = useState(new Date());
   const [currentReadings, setCurrentReadings] = useState<any[]>([]);
@@ -86,6 +116,16 @@ export function ReportComparison({ siteId, siteName, getMetricThreshold }: Repor
   const [hasData, setHasData] = useState(false);
   const [exportingPDF, setExportingPDF] = useState(false);
   const chartRef = useRef<HTMLDivElement>(null);
+
+  // Annotation state
+  const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  const [loadingAnnotations, setLoadingAnnotations] = useState(false);
+  const [showAnnotationModal, setShowAnnotationModal] = useState(false);
+  const [selectedMetricForAnnotation, setSelectedMetricForAnnotation] = useState<string | null>(null);
+  const [annotationNote, setAnnotationNote] = useState('');
+  const [annotationSeverity, setAnnotationSeverity] = useState<AnnotationSeverity>('info');
+  const [savingAnnotation, setSavingAnnotation] = useState(false);
+  const [editingAnnotation, setEditingAnnotation] = useState<Annotation | null>(null);
 
   // Calculate comparison periods
   const periods = useMemo((): { current: ComparisonPeriod; previous: ComparisonPeriod } => {
@@ -142,6 +182,168 @@ export function ReportComparison({ siteId, siteName, getMetricThreshold }: Repor
       setReferenceDate(prev => 
         direction === 'prev' ? subMonths(prev, 1) : addMonths(prev, 1)
       );
+    }
+  };
+
+  // Fetch annotations for the current period
+  const fetchAnnotations = async () => {
+    if (!siteId || !user) return;
+
+    setLoadingAnnotations(true);
+    try {
+      const { data, error } = await supabase
+        .from('comparison_annotations')
+        .select('*')
+        .eq('site_id', siteId)
+        .eq('comparison_type', comparisonType)
+        .eq('period_start', format(periods.current.from, 'yyyy-MM-dd'))
+        .eq('period_end', format(periods.current.to, 'yyyy-MM-dd'))
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setAnnotations((data || []) as Annotation[]);
+    } catch (error) {
+      console.error('Error fetching annotations:', error);
+    } finally {
+      setLoadingAnnotations(false);
+    }
+  };
+
+  // Fetch annotations when periods change
+  useEffect(() => {
+    if (hasData && user) {
+      fetchAnnotations();
+    }
+  }, [hasData, periods.current.from, periods.current.to, comparisonType, user]);
+
+  // Save annotation
+  const handleSaveAnnotation = async () => {
+    if (!user || !selectedMetricForAnnotation || !annotationNote.trim()) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    setSavingAnnotation(true);
+    try {
+      if (editingAnnotation) {
+        const { error } = await supabase
+          .from('comparison_annotations')
+          .update({
+            note: annotationNote.trim(),
+            severity: annotationSeverity,
+          })
+          .eq('id', editingAnnotation.id);
+
+        if (error) throw error;
+        toast.success('Annotation updated');
+      } else {
+        const { error } = await supabase
+          .from('comparison_annotations')
+          .insert({
+            site_id: siteId,
+            user_id: user.id,
+            metric_id: selectedMetricForAnnotation,
+            comparison_type: comparisonType,
+            period_start: format(periods.current.from, 'yyyy-MM-dd'),
+            period_end: format(periods.current.to, 'yyyy-MM-dd'),
+            note: annotationNote.trim(),
+            severity: annotationSeverity,
+          });
+
+        if (error) throw error;
+        toast.success('Annotation added');
+      }
+
+      setShowAnnotationModal(false);
+      setAnnotationNote('');
+      setAnnotationSeverity('info');
+      setSelectedMetricForAnnotation(null);
+      setEditingAnnotation(null);
+      fetchAnnotations();
+    } catch (error) {
+      console.error('Error saving annotation:', error);
+      toast.error('Failed to save annotation');
+    } finally {
+      setSavingAnnotation(false);
+    }
+  };
+
+  // Delete annotation
+  const handleDeleteAnnotation = async (annotationId: string) => {
+    try {
+      const { error } = await supabase
+        .from('comparison_annotations')
+        .delete()
+        .eq('id', annotationId);
+
+      if (error) throw error;
+      
+      setAnnotations(prev => prev.filter(a => a.id !== annotationId));
+      toast.success('Annotation deleted');
+    } catch (error) {
+      console.error('Error deleting annotation:', error);
+      toast.error('Failed to delete annotation');
+    }
+  };
+
+  // Resolve annotation
+  const handleResolveAnnotation = async (annotation: Annotation) => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from('comparison_annotations')
+        .update({
+          is_resolved: !annotation.is_resolved,
+          resolved_at: annotation.is_resolved ? null : new Date().toISOString(),
+          resolved_by: annotation.is_resolved ? null : user.id,
+        })
+        .eq('id', annotation.id);
+
+      if (error) throw error;
+      
+      fetchAnnotations();
+      toast.success(annotation.is_resolved ? 'Annotation reopened' : 'Annotation resolved');
+    } catch (error) {
+      console.error('Error updating annotation:', error);
+      toast.error('Failed to update annotation');
+    }
+  };
+
+  // Open annotation modal for a metric
+  const openAnnotationModal = (metricId: string, annotation?: Annotation) => {
+    setSelectedMetricForAnnotation(metricId);
+    if (annotation) {
+      setEditingAnnotation(annotation);
+      setAnnotationNote(annotation.note);
+      setAnnotationSeverity(annotation.severity as AnnotationSeverity);
+    } else {
+      setEditingAnnotation(null);
+      setAnnotationNote('');
+      setAnnotationSeverity('info');
+    }
+    setShowAnnotationModal(true);
+  };
+
+  // Get annotations for a specific metric
+  const getMetricAnnotations = (metricId: string) => {
+    return annotations.filter(a => a.metric_id === metricId);
+  };
+
+  // Severity icon and color helpers
+  const getSeverityIcon = (severity: AnnotationSeverity) => {
+    switch (severity) {
+      case 'critical': return <AlertCircle className="w-4 h-4" />;
+      case 'warning': return <AlertTriangle className="w-4 h-4" />;
+      default: return <Info className="w-4 h-4" />;
+    }
+  };
+
+  const getSeverityColor = (severity: AnnotationSeverity) => {
+    switch (severity) {
+      case 'critical': return 'text-destructive bg-destructive/10 border-destructive/20';
+      case 'warning': return 'text-status-warning bg-status-warning/10 border-status-warning/20';
+      default: return 'text-status-info bg-status-info/10 border-status-info/20';
     }
   };
 
@@ -605,17 +807,34 @@ export function ReportComparison({ siteId, siteName, getMetricThreshold }: Repor
             {Object.entries(METRICS).map(([id, metric]) => {
               const stats = comparisonStats[id as MetricType];
               if (!stats || (stats.current.count === 0 && stats.previous.count === 0)) return null;
+              const metricAnnotations = getMetricAnnotations(id);
+              const hasUnresolvedAnnotations = metricAnnotations.some(a => !a.is_resolved);
 
               return (
                 <div
                   key={id}
-                  className="bg-card rounded-xl border border-border p-4"
+                  className={cn(
+                    "bg-card rounded-xl border p-4 relative",
+                    hasUnresolvedAnnotations ? "border-status-warning" : "border-border"
+                  )}
                 >
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-medium text-foreground">{metric.name}</span>
-                    {stats.trend === 'up' && <TrendingUp className="w-4 h-4 text-status-warning" />}
-                    {stats.trend === 'down' && <TrendingDown className="w-4 h-4 text-status-info" />}
-                    {stats.trend === 'stable' && <Minus className="w-4 h-4 text-muted-foreground" />}
+                    <div className="flex items-center gap-1">
+                      {metricAnnotations.length > 0 && (
+                        <span className={cn(
+                          "flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold",
+                          hasUnresolvedAnnotations 
+                            ? "bg-status-warning/20 text-status-warning" 
+                            : "bg-muted text-muted-foreground"
+                        )}>
+                          {metricAnnotations.length}
+                        </span>
+                      )}
+                      {stats.trend === 'up' && <TrendingUp className="w-4 h-4 text-status-warning" />}
+                      {stats.trend === 'down' && <TrendingDown className="w-4 h-4 text-status-info" />}
+                      {stats.trend === 'stable' && <Minus className="w-4 h-4 text-muted-foreground" />}
+                    </div>
                   </div>
                   
                   <div className="space-y-2">
@@ -652,9 +871,139 @@ export function ReportComparison({ siteId, siteName, getMetricThreshold }: Repor
                       </p>
                     </div>
                   )}
+
+                  {/* Add annotation button */}
+                  <button
+                    onClick={() => openAnnotationModal(id)}
+                    className="absolute top-2 right-2 p-1 rounded hover:bg-muted transition-colors opacity-0 group-hover:opacity-100"
+                    title="Add annotation"
+                  >
+                    <MessageSquarePlus className="w-3.5 h-3.5 text-muted-foreground" />
+                  </button>
                 </div>
               );
             })}
+          </div>
+
+          {/* Annotations Section */}
+          {annotations.length > 0 && (
+            <div className="bg-card rounded-xl border border-border p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                  <MessageSquarePlus className="w-5 h-5 text-primary" />
+                  Annotations & Notes
+                </h3>
+                <span className="text-sm text-muted-foreground">
+                  {annotations.filter(a => !a.is_resolved).length} open, {annotations.filter(a => a.is_resolved).length} resolved
+                </span>
+              </div>
+              <div className="space-y-3">
+                {annotations.map(annotation => {
+                  const metric = METRICS[annotation.metric_id as MetricType];
+                  return (
+                    <div 
+                      key={annotation.id} 
+                      className={cn(
+                        "p-4 rounded-lg border",
+                        annotation.is_resolved 
+                          ? "bg-muted/30 border-border opacity-70" 
+                          : getSeverityColor(annotation.severity as AnnotationSeverity)
+                      )}
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex items-start gap-3 flex-1">
+                          <div className={cn(
+                            "mt-0.5",
+                            annotation.is_resolved ? "text-muted-foreground" : ""
+                          )}>
+                            {annotation.is_resolved 
+                              ? <CheckCircle className="w-4 h-4 text-status-normal" />
+                              : getSeverityIcon(annotation.severity as AnnotationSeverity)
+                            }
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className={cn(
+                                "font-medium",
+                                annotation.is_resolved ? "text-muted-foreground line-through" : "text-foreground"
+                              )}>
+                                {metric?.name || annotation.metric_id}
+                              </span>
+                              <span className={cn(
+                                "text-xs px-2 py-0.5 rounded-full",
+                                annotation.is_resolved 
+                                  ? "bg-muted text-muted-foreground" 
+                                  : annotation.severity === 'critical' 
+                                    ? "bg-destructive/20 text-destructive"
+                                    : annotation.severity === 'warning'
+                                      ? "bg-status-warning/20 text-status-warning"
+                                      : "bg-status-info/20 text-status-info"
+                              )}>
+                                {annotation.severity}
+                              </span>
+                              {annotation.is_resolved && (
+                                <span className="text-xs text-status-normal">Resolved</span>
+                              )}
+                            </div>
+                            <p className={cn(
+                              "text-sm",
+                              annotation.is_resolved ? "text-muted-foreground" : "text-foreground"
+                            )}>
+                              {annotation.note}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-2">
+                              Added {format(new Date(annotation.created_at), 'MMM d, yyyy h:mm a')}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => handleResolveAnnotation(annotation)}
+                            className={cn(
+                              "p-1.5 rounded-lg transition-colors",
+                              annotation.is_resolved 
+                                ? "hover:bg-muted text-muted-foreground" 
+                                : "hover:bg-status-normal/20 text-status-normal"
+                            )}
+                            title={annotation.is_resolved ? "Reopen" : "Mark as resolved"}
+                          >
+                            <Check className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => openAnnotationModal(annotation.metric_id, annotation)}
+                            className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground transition-colors"
+                            title="Edit"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteAnnotation(annotation.id)}
+                            className="p-1.5 rounded-lg hover:bg-destructive/20 text-destructive transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Add Annotation Button */}
+          <div className="flex justify-center">
+            <button
+              onClick={() => {
+                const firstMetric = Object.keys(METRICS)[0];
+                if (firstMetric) openAnnotationModal(firstMetric);
+              }}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg border border-dashed border-border hover:border-primary hover:bg-primary/5 transition-colors text-sm text-muted-foreground hover:text-foreground"
+            >
+              <MessageSquarePlus className="w-4 h-4" />
+              Add Annotation
+            </button>
           </div>
 
           {/* Comparison Chart */}
@@ -817,6 +1166,137 @@ export function ReportComparison({ siteId, siteName, getMetricThreshold }: Repor
           <p className="text-muted-foreground">
             No readings were found for the selected periods. Try selecting a different time range.
           </p>
+        </div>
+      )}
+
+      {/* Annotation Modal */}
+      {showAnnotationModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+          <div className="bg-card rounded-xl border border-border shadow-xl w-full max-w-md mx-4">
+            <div className="flex items-center justify-between p-6 border-b border-border">
+              <h2 className="text-lg font-semibold text-foreground">
+                {editingAnnotation ? 'Edit Annotation' : 'Add Annotation'}
+              </h2>
+              <button
+                onClick={() => {
+                  setShowAnnotationModal(false);
+                  setEditingAnnotation(null);
+                  setAnnotationNote('');
+                  setAnnotationSeverity('info');
+                }}
+                className="p-2 hover:bg-muted rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              {/* Metric selector */}
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Metric
+                </label>
+                <select
+                  value={selectedMetricForAnnotation || ''}
+                  onChange={(e) => setSelectedMetricForAnnotation(e.target.value)}
+                  className="input-field"
+                  disabled={!!editingAnnotation}
+                >
+                  <option value="">Select a metric...</option>
+                  {Object.entries(METRICS).map(([id, metric]) => (
+                    <option key={id} value={id}>{metric.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Severity selector */}
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Severity
+                </label>
+                <div className="flex items-center gap-2">
+                  {(['info', 'warning', 'critical'] as AnnotationSeverity[]).map(severity => (
+                    <button
+                      key={severity}
+                      type="button"
+                      onClick={() => setAnnotationSeverity(severity)}
+                      className={cn(
+                        "flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors flex-1",
+                        annotationSeverity === severity
+                          ? severity === 'critical' 
+                            ? "bg-destructive text-destructive-foreground"
+                            : severity === 'warning'
+                              ? "bg-status-warning text-white"
+                              : "bg-status-info text-white"
+                          : "bg-muted hover:bg-muted/80 text-foreground"
+                      )}
+                    >
+                      {severity === 'critical' && <AlertCircle className="w-4 h-4" />}
+                      {severity === 'warning' && <AlertTriangle className="w-4 h-4" />}
+                      {severity === 'info' && <Info className="w-4 h-4" />}
+                      {severity.charAt(0).toUpperCase() + severity.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Note textarea */}
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Note *
+                </label>
+                <textarea
+                  value={annotationNote}
+                  onChange={(e) => setAnnotationNote(e.target.value)}
+                  placeholder="Describe the anomaly or observation..."
+                  className="input-field min-h-[100px] resize-y"
+                  maxLength={1000}
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  {annotationNote.length}/1000 characters
+                </p>
+              </div>
+
+              {/* Period info */}
+              <div className="bg-muted/50 rounded-lg p-3 text-sm">
+                <p className="text-muted-foreground">
+                  This annotation will be linked to:
+                </p>
+                <p className="font-medium text-foreground mt-1">
+                  {periods.current.label} ({format(periods.current.from, 'MMM d')} - {format(periods.current.to, 'MMM d, yyyy')})
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-3 p-6 border-t border-border">
+              <button
+                onClick={() => {
+                  setShowAnnotationModal(false);
+                  setEditingAnnotation(null);
+                  setAnnotationNote('');
+                  setAnnotationSeverity('info');
+                }}
+                className="px-4 py-2 rounded-lg border border-border hover:bg-muted transition-colors text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveAnnotation}
+                disabled={savingAnnotation || !annotationNote.trim() || !selectedMetricForAnnotation}
+                className="btn-primary flex items-center gap-2 disabled:opacity-50"
+              >
+                {savingAnnotation ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    {editingAnnotation ? 'Update' : 'Save'} Annotation
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

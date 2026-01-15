@@ -68,6 +68,65 @@ export type Database = {
         }
         Relationships: []
       }
+      comparison_annotations: {
+        Row: {
+          comparison_type: string
+          created_at: string
+          id: string
+          is_resolved: boolean | null
+          metric_id: string
+          note: string
+          period_end: string
+          period_start: string
+          resolved_at: string | null
+          resolved_by: string | null
+          severity: string
+          site_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          comparison_type: string
+          created_at?: string
+          id?: string
+          is_resolved?: boolean | null
+          metric_id: string
+          note: string
+          period_end: string
+          period_start: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          severity?: string
+          site_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          comparison_type?: string
+          created_at?: string
+          id?: string
+          is_resolved?: boolean | null
+          metric_id?: string
+          note?: string
+          period_end?: string
+          period_start?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          severity?: string
+          site_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comparison_annotations_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       email_logs: {
         Row: {
           alert_event_id: string | null
