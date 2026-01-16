@@ -14,28 +14,46 @@ export default function ResetPassword() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Check if we have a valid recovery session
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        setIsValidSession(true);
-      }
-      setIsLoading(false);
-    };
-
-    checkSession();
-
-    // Listen for auth state changes (recovery link click)
+    // Listen for auth state changes first (recovery link triggers this)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        if (event === 'PASSWORD_RECOVERY') {
+        console.log('Auth event:', event, 'Session:', !!session);
+        if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') {
           setIsValidSession(true);
+          setIsLoading(false);
+        } else if (event === 'INITIAL_SESSION') {
+          // Check if we have a valid session from the recovery link
+          if (session) {
+            setIsValidSession(true);
+          }
           setIsLoading(false);
         }
       }
     );
 
-    return () => subscription.unsubscribe();
+    // Also check URL hash for recovery tokens (some email clients)
+    const hashParams = new URLSearchParams(window.location.hash.substring(1));
+    const accessToken = hashParams.get('access_token');
+    const type = hashParams.get('type');
+    
+    if (accessToken && type === 'recovery') {
+      // Let the auth state change handler process this
+      setIsLoading(true);
+    }
+
+    // Fallback: Check existing session after a delay
+    const timeout = setTimeout(async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        setIsValidSession(true);
+      }
+      setIsLoading(false);
+    }, 2000);
+
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(timeout);
+    };
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
