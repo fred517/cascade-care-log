@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { EmailRecipients } from '@/components/settings/EmailRecipients';
+import { SiteSettings } from '@/components/settings/SiteSettings';
 import { Threshold, MetricType, METRICS } from '@/types/wastewater';
 import { useReadings } from '@/hooks/useReadings';
 import { useSite } from '@/hooks/useSite';
@@ -424,58 +425,7 @@ export default function Settings() {
           )}
 
           {activeTab === 'site' && (
-            <div>
-              <div className="mb-6">
-                <h2 className="text-xl font-semibold text-foreground mb-1">
-                  Site Configuration
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  View site details and preferences.
-                </p>
-              </div>
-              
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">
-                    Site Name
-                  </label>
-                  <input 
-                    type="text" 
-                    value={site?.name || 'Main Treatment Plant'}
-                    readOnly
-                    className="input-field bg-muted/50"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">
-                    Timezone
-                  </label>
-                  <input 
-                    type="text" 
-                    value={site?.timezone || 'America/New_York'}
-                    readOnly
-                    className="input-field bg-muted/50"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">
-                    Ammonia Reporting Basis
-                  </label>
-                  <input 
-                    type="text" 
-                    value={site?.ammonia_basis === 'nh4n' ? 'NH₄-N (Ammonium Nitrogen)' : 'NH₃-N (Ammonia Nitrogen)'}
-                    readOnly
-                    className="input-field bg-muted/50"
-                  />
-                </div>
-
-                <p className="text-xs text-muted-foreground mt-4">
-                  Contact an administrator to change site settings.
-                </p>
-              </div>
-            </div>
+            <SiteSettings site={site} />
           )}
         </div>
       </div>
