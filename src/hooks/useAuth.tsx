@@ -11,6 +11,9 @@ interface Profile {
   email: string | null;
   avatar_url: string | null;
   site_id: string | null;
+  is_approved: boolean;
+  approved_by: string | null;
+  approved_at: string | null;
 }
 
 interface AuthContextType {
@@ -19,6 +22,7 @@ interface AuthContextType {
   profile: Profile | null;
   role: AppRole | null;
   loading: boolean;
+  isApproved: boolean;
   signUp: (email: string, password: string, displayName?: string) => Promise<{ error: Error | null }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
@@ -98,7 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signUp = async (email: string, password: string, displayName?: string) => {
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -108,6 +112,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         },
       },
     });
+
+    // Send notification to admin if signup was successful
+    if (!error && data.user) {
+      try {
+        await supabase.functions.invoke('send-signup-notification', {
+          body: {
+            userId: data.user.id,
+            email: email,
+            displayName: displayName,
+          },
+        });
+      } catch (notifyError) {
+        console.error('Failed to send signup notification:', notifyError);
+      }
+    }
+
     return { error };
   };
 
@@ -133,6 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     profile,
     role,
     loading,
+    isApproved: profile?.is_approved ?? false,
     signUp,
     signIn,
     signOut,

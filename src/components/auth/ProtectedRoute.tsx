@@ -10,7 +10,7 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) {
-  const { user, loading, role, isAdmin, isSupervisor, isOperator } = useAuth();
+  const { user, loading, role, isAdmin, isSupervisor, isOperator, isApproved, signOut } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -27,6 +27,33 @@ export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) 
   if (!user) {
     // Redirect to login, preserving the intended destination
     return <Navigate to="/auth" state={{ from: location }} replace />;
+  }
+
+  // Check if user is approved
+  if (!isApproved && !isAdmin) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center max-w-md p-8">
+          <div className="w-16 h-16 rounded-full bg-yellow-500/20 flex items-center justify-center mx-auto mb-4">
+            <span className="text-3xl">⏳</span>
+          </div>
+          <h1 className="text-2xl font-bold text-foreground mb-2">Account Pending Approval</h1>
+          <p className="text-muted-foreground mb-6">
+            Your account has been created successfully, but it's waiting for administrator approval. 
+            You'll receive access once an admin approves your account.
+          </p>
+          <p className="text-sm text-muted-foreground mb-6">
+            If you believe this is taking too long, please contact your administrator.
+          </p>
+          <button 
+            onClick={() => signOut()}
+            className="btn-secondary"
+          >
+            Sign Out
+          </button>
+        </div>
+      </div>
+    );
   }
 
   // Check role-based access if required

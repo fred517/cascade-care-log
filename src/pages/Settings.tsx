@@ -5,6 +5,7 @@ import { SiteSettings } from '@/components/settings/SiteSettings';
 import { UserManagement } from '@/components/settings/UserManagement';
 import { SiteMemberManagement } from '@/components/settings/SiteMemberManagement';
 import CalibrationManager from '@/components/settings/CalibrationManager';
+import UserApproval from '@/components/settings/UserApproval';
 import { Threshold, MetricType, METRICS } from '@/types/wastewater';
 import { useReadings } from '@/hooks/useReadings';
 import { useSite } from '@/hooks/useSite';
@@ -12,10 +13,10 @@ import { useAuth } from '@/hooks/useAuth';
 import { useMissingReadingsReminder } from '@/hooks/useMissingReadingsReminder';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
-import { Sliders, Bell, Users, Building2, Check, RotateCcw, Loader2, Send, AlertCircle, CheckCircle2, FileText, ShieldAlert, UserCog, UsersRound, Wrench } from 'lucide-react';
+import { Sliders, Bell, Users, Building2, Check, RotateCcw, Loader2, Send, AlertCircle, CheckCircle2, FileText, ShieldAlert, UserCog, UsersRound, Wrench, UserCheck } from 'lucide-react';
 import { toast } from 'sonner';
 
-type SettingsTab = 'thresholds' | 'calibrations' | 'notifications' | 'team' | 'site-members' | 'users' | 'site';
+type SettingsTab = 'thresholds' | 'calibrations' | 'notifications' | 'team' | 'site-members' | 'users' | 'approvals' | 'site';
 
 export default function Settings() {
   const { site, loading: siteLoading } = useSite();
@@ -90,6 +91,7 @@ export default function Settings() {
     { key: 'team' as const, label: 'Team', icon: Users },
     { key: 'site-members' as const, label: 'Site Members', icon: UsersRound },
     { key: 'users' as const, label: 'User Roles', icon: UserCog, adminOnly: true },
+    { key: 'approvals' as const, label: 'Approvals', icon: UserCheck, adminOnly: true },
     { key: 'site' as const, label: 'Site', icon: Building2 },
   ];
 
@@ -604,6 +606,10 @@ export default function Settings() {
 
           {activeTab === 'users' && (
             <UserManagement teamMembers={teamMembers} onRoleUpdated={fetchTeam} />
+          )}
+
+          {activeTab === 'approvals' && (
+            <UserApproval />
           )}
 
           {activeTab === 'calibrations' && (
