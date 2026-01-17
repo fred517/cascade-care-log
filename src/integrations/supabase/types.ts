@@ -490,6 +490,50 @@ export type Database = {
           },
         ]
       }
+      odour_reports: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          latitude: number
+          longitude: number
+          observed_at: string
+          odour: Json
+          site_id: string
+          weather: Json
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          latitude: number
+          longitude: number
+          observed_at: string
+          odour: Json
+          site_id: string
+          weather: Json
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          latitude?: number
+          longitude?: number
+          observed_at?: string
+          odour?: Json
+          site_id?: string
+          weather?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "odour_reports_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       odour_sources: {
         Row: {
           base_intensity: number | null
