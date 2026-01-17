@@ -202,6 +202,129 @@ export type Database = {
         }
         Relationships: []
       }
+      odour_incidents: {
+        Row: {
+          click_x: number
+          click_y: number
+          corrective_actions: string | null
+          created_at: string
+          created_by: string
+          duration: number | null
+          follow_up_date: string | null
+          follow_up_notes: string | null
+          frequency: number | null
+          humidity: number | null
+          id: string
+          incident_at: string
+          intensity: number | null
+          latitude: number | null
+          location_impact: string | null
+          longitude: number | null
+          notes: string | null
+          odour_type: string | null
+          offensiveness: number | null
+          pressure: number | null
+          resolved_at: string | null
+          resolved_by: string | null
+          site_id: string
+          site_map_id: string | null
+          source_suspected: string | null
+          status: string | null
+          temperature: number | null
+          updated_at: string
+          weather_description: string | null
+          weather_fetched_at: string | null
+          wind_direction: number | null
+          wind_direction_text: string | null
+          wind_speed: number | null
+        }
+        Insert: {
+          click_x: number
+          click_y: number
+          corrective_actions?: string | null
+          created_at?: string
+          created_by: string
+          duration?: number | null
+          follow_up_date?: string | null
+          follow_up_notes?: string | null
+          frequency?: number | null
+          humidity?: number | null
+          id?: string
+          incident_at?: string
+          intensity?: number | null
+          latitude?: number | null
+          location_impact?: string | null
+          longitude?: number | null
+          notes?: string | null
+          odour_type?: string | null
+          offensiveness?: number | null
+          pressure?: number | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          site_id: string
+          site_map_id?: string | null
+          source_suspected?: string | null
+          status?: string | null
+          temperature?: number | null
+          updated_at?: string
+          weather_description?: string | null
+          weather_fetched_at?: string | null
+          wind_direction?: number | null
+          wind_direction_text?: string | null
+          wind_speed?: number | null
+        }
+        Update: {
+          click_x?: number
+          click_y?: number
+          corrective_actions?: string | null
+          created_at?: string
+          created_by?: string
+          duration?: number | null
+          follow_up_date?: string | null
+          follow_up_notes?: string | null
+          frequency?: number | null
+          humidity?: number | null
+          id?: string
+          incident_at?: string
+          intensity?: number | null
+          latitude?: number | null
+          location_impact?: string | null
+          longitude?: number | null
+          notes?: string | null
+          odour_type?: string | null
+          offensiveness?: number | null
+          pressure?: number | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          site_id?: string
+          site_map_id?: string | null
+          source_suspected?: string | null
+          status?: string | null
+          temperature?: number | null
+          updated_at?: string
+          weather_description?: string | null
+          weather_fetched_at?: string | null
+          wind_direction?: number | null
+          wind_direction_text?: string | null
+          wind_speed?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "odour_incidents_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "odour_incidents_site_map_id_fkey"
+            columns: ["site_map_id"]
+            isOneToOne: false
+            referencedRelation: "site_maps"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -340,6 +463,53 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "report_templates_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      site_maps: {
+        Row: {
+          created_at: string
+          created_by: string
+          description: string | null
+          id: string
+          image_url: string
+          latitude: number | null
+          longitude: number | null
+          name: string
+          site_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          description?: string | null
+          id?: string
+          image_url: string
+          latitude?: number | null
+          longitude?: number | null
+          name: string
+          site_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          id?: string
+          image_url?: string
+          latitude?: number | null
+          longitude?: number | null
+          name?: string
+          site_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "site_maps_site_id_fkey"
             columns: ["site_id"]
             isOneToOne: false
             referencedRelation: "sites"
