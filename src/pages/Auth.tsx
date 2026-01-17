@@ -47,7 +47,7 @@ export default function Auth() {
     try {
       if (authMode === 'forgot') {
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: `${window.location.origin}/reset-password`,
+          redirectTo: "https://waterops.com.au/reset-password",
         });
         if (error) {
           toast.error(error.message);
