@@ -15,14 +15,30 @@ interface MissingReadingsRequest {
   checkDate?: string; // ISO date string, defaults to today
 }
 
-const METRICS = [
-  { id: 'svi', name: 'SVI', unit: 'mL/g' },
-  { id: 'ph', name: 'pH', unit: '' },
-  { id: 'do', name: 'DO', unit: 'mg/L' },
-  { id: 'orp', name: 'ORP', unit: 'mV' },
-  { id: 'mlss', name: 'MLSS', unit: 'mg/L' },
-  { id: 'ammonia', name: 'Ammonia', unit: 'mg/L' },
+// Complete parameter definitions matching the frontend
+const PARAMETERS = [
+  { id: 'ph', name: 'pH', unit: '', category: 'Core' },
+  { id: 'do', name: 'Dissolved Oxygen', unit: 'mg/L', category: 'Core' },
+  { id: 'orp', name: 'ORP', unit: 'mV', category: 'Core' },
+  { id: 'mlss', name: 'MLSS', unit: 'mg/L', category: 'Core' },
+  { id: 'temp_c', name: 'Temperature', unit: '°C', category: 'Core' },
+  { id: 'svi', name: 'SVI', unit: 'mL/g', category: 'Process' },
+  { id: 'sludge_blanket_depth', name: 'Sludge Blanket Depth', unit: 'm', category: 'Process' },
+  { id: 'tss', name: 'TSS', unit: 'mg/L', category: 'Solids' },
+  { id: 'vss', name: 'VSS', unit: 'mg/L', category: 'Solids' },
+  { id: 'turbidity', name: 'Turbidity', unit: 'NTU', category: 'Solids' },
+  { id: 'settleable_solids', name: 'Settleable Solids', unit: 'mL/L', category: 'Solids' },
+  { id: 'ammonia_tan', name: 'Ammonia (TAN)', unit: 'mg/L', category: 'Nutrients' },
+  { id: 'nitrate_no3n', name: 'Nitrate (NO₃-N)', unit: 'mg/L', category: 'Nutrients' },
+  { id: 'nitrite_no2n', name: 'Nitrite (NO₂-N)', unit: 'mg/L', category: 'Nutrients' },
+  { id: 'alkalinity', name: 'Alkalinity', unit: 'mg/L', category: 'Nutrients' },
+  { id: 'conductivity', name: 'Conductivity', unit: 'µS/cm', category: 'Softwater' },
 ];
+
+// Core parameters that are expected daily
+const CORE_PARAMETERS = PARAMETERS.filter(p => 
+  ['Core', 'Process'].includes(p.category) || p.id === 'ammonia_tan'
+);
 
 const handler = async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
@@ -45,6 +61,8 @@ const handler = async (req: Request): Promise<Response> => {
     const startOfDay = `${dateStr}T00:00:00.000Z`;
     const endOfDay = `${dateStr}T23:59:59.999Z`;
 
+    console.log(`Checking missing readings for date: ${dateStr}`);
+
     // Get sites to check
     let sitesQuery = supabase.from("sites").select("*");
     if (requestData.siteId) {
@@ -54,6 +72,7 @@ const handler = async (req: Request): Promise<Response> => {
     const { data: sites, error: sitesError } = await sitesQuery;
     if (sitesError) throw new Error(`Failed to fetch sites: ${sitesError.message}`);
     if (!sites || sites.length === 0) {
+      console.log("No sites found");
       return new Response(
         JSON.stringify({ message: "No sites found" }),
         { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
@@ -63,6 +82,8 @@ const handler = async (req: Request): Promise<Response> => {
     const results: any[] = [];
 
     for (const site of sites) {
+      console.log(`Processing site: ${site.name} (${site.id})`);
+      
       // Get readings for this site today
       const { data: readings, error: readingsError } = await supabase
         .from("readings")
@@ -77,7 +98,9 @@ const handler = async (req: Request): Promise<Response> => {
       }
 
       const recordedMetrics = new Set(readings?.map(r => r.metric_id) || []);
-      const missingMetrics = METRICS.filter(m => !recordedMetrics.has(m.id));
+      const missingMetrics = CORE_PARAMETERS.filter(m => !recordedMetrics.has(m.id));
+
+      console.log(`Site ${site.name}: ${recordedMetrics.size} recorded, ${missingMetrics.length} missing`);
 
       if (missingMetrics.length === 0) {
         results.push({ site: site.name, status: "complete", missingCount: 0 });
@@ -114,12 +137,28 @@ const handler = async (req: Request): Promise<Response> => {
         day: 'numeric' 
       }).format(checkDate);
 
-      const missingMetricsList = missingMetrics
-        .map(m => `<li><strong>${m.name}</strong>${m.unit ? ` (${m.unit})` : ''}</li>`)
+      // Group missing metrics by category
+      const missingByCategory: Record<string, typeof missingMetrics> = {};
+      missingMetrics.forEach(m => {
+        if (!missingByCategory[m.category]) {
+          missingByCategory[m.category] = [];
+        }
+        missingByCategory[m.category].push(m);
+      });
+
+      const missingMetricsList = Object.entries(missingByCategory)
+        .map(([category, metrics]) => `
+          <li style="margin-bottom: 8px;">
+            <strong>${category}:</strong>
+            <ul style="margin-top: 4px;">
+              ${metrics.map(m => `<li>${m.name}${m.unit ? ` (${m.unit})` : ''}</li>`).join('')}
+            </ul>
+          </li>
+        `)
         .join('');
 
-      const recordedCount = METRICS.length - missingMetrics.length;
-      const completionPercentage = Math.round((recordedCount / METRICS.length) * 100);
+      const recordedCount = CORE_PARAMETERS.length - missingMetrics.length;
+      const completionPercentage = Math.round((recordedCount / CORE_PARAMETERS.length) * 100);
 
       for (const recipient of recipients) {
         const subject = `📋 Missing Readings Reminder - ${site.name} (${formattedDate})`;
@@ -143,7 +182,6 @@ const handler = async (req: Request): Promise<Response> => {
               .stat-box { flex: 1; background: white; padding: 16px; border-radius: 8px; text-align: center; }
               .stat-value { font-size: 28px; font-weight: bold; color: #1a1a2e; }
               .stat-label { font-size: 12px; color: #64748b; text-transform: uppercase; }
-              .cta-button { display: inline-block; background: #0ea5e9; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; margin-top: 16px; }
               .footer { padding: 20px; text-align: center; color: #64748b; font-size: 12px; }
             </style>
           </head>
@@ -177,7 +215,7 @@ const handler = async (req: Request): Promise<Response> => {
                 </div>
 
                 <div class="missing-box">
-                  <h3>⚠️ Missing Readings</h3>
+                  <h3>⚠️ Missing Readings by Category</h3>
                   <ul>
                     ${missingMetricsList}
                   </ul>
@@ -235,6 +273,8 @@ const handler = async (req: Request): Promise<Response> => {
         recipientCount: recipients.length
       });
     }
+
+    console.log("Reminder processing complete:", results);
 
     return new Response(
       JSON.stringify({ 

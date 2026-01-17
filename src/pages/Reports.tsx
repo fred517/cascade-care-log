@@ -6,7 +6,7 @@ import { useReadings } from '@/hooks/useReadings';
 import { useSite } from '@/hooks/useSite';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
-import { METRICS, MetricType, Reading, Threshold } from '@/types/wastewater';
+import { PARAMETERS, METRICS, ParameterKey, MetricType, Reading, Threshold, PARAMETER_LIST, PARAMETER_ICONS } from '@/types/wastewater';
 import { cn } from '@/lib/utils';
 import { 
   Calendar, 

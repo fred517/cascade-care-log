@@ -4,7 +4,7 @@ import { MetricCard } from '@/components/dashboard/MetricCard';
 import { AlertBanner } from '@/components/dashboard/AlertBanner';
 import { QuickStats } from '@/components/dashboard/QuickStats';
 import { MetricChart } from '@/components/charts/MetricChart';
-import { METRICS, MetricType, DailyStatus, Reading, Threshold, AlertEvent } from '@/types/wastewater';
+import { PARAMETERS, METRICS, ParameterKey, MetricType, DailyStatus, Reading, Threshold, AlertEvent, getDefaultThresholds, PARAMETER_LIST } from '@/types/wastewater';
 import { useAuth } from '@/hooks/useAuth';
 import { useReadings } from '@/hooks/useReadings';
 import { useSite } from '@/hooks/useSite';
