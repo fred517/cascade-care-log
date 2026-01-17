@@ -425,24 +425,24 @@ export default function Organizations() {
     <AppLayout>
       <div className="max-w-6xl mx-auto">
         {/* Header */}
-        <div className="flex items-start justify-between mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground mb-2">Organizations</h1>
-            <p className="text-muted-foreground">
-              Manage your organizations and team members
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
+          <div className="min-w-0">
+            <h1 className="text-2xl lg:text-3xl font-bold text-foreground mb-1">Organizations</h1>
+            <p className="text-sm text-muted-foreground">
+              Manage organizations and team members
             </p>
           </div>
           <button
             onClick={() => setShowCreateForm(!showCreateForm)}
             className={cn(
-              "flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all",
+              "flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all shrink-0",
               showCreateForm
                 ? "bg-muted text-foreground"
                 : "bg-primary text-primary-foreground hover:bg-primary/90"
             )}
           >
             <Plus className="w-4 h-4" />
-            New Organization
+            New Org
           </button>
         </div>
 
@@ -593,11 +593,11 @@ export default function Organizations() {
           {/* Organization Details */}
           <div className="lg:col-span-2">
             {selectedOrg ? (
-              <div className="bg-card rounded-xl border border-border p-6">
-                <div className="flex items-start justify-between mb-6">
-                  <div>
-                    <h2 className="text-xl font-semibold text-foreground">{selectedOrg.name}</h2>
-                    <p className="text-sm text-muted-foreground">
+              <div className="bg-card rounded-xl border border-border p-4 lg:p-6">
+                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-4">
+                  <div className="min-w-0">
+                    <h2 className="text-lg font-semibold text-foreground truncate">{selectedOrg.name}</h2>
+                    <p className="text-xs text-muted-foreground">
                       Created {new Date(selectedOrg.created_at).toLocaleDateString()}
                     </p>
                   </div>
@@ -605,7 +605,7 @@ export default function Organizations() {
                     <button
                       onClick={() => setShowInviteForm(!showInviteForm)}
                       className={cn(
-                        "flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all",
+                        "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all shrink-0",
                         showInviteForm
                           ? "bg-muted text-foreground"
                           : "bg-primary text-primary-foreground hover:bg-primary/90"
@@ -619,39 +619,41 @@ export default function Organizations() {
 
                 {/* Invite Form */}
                 {showInviteForm && canManageOrg(selectedOrg) && (
-                  <form onSubmit={handleInviteMember} className="mb-6 p-4 bg-muted/30 rounded-lg border border-border">
-                    <h3 className="font-medium text-foreground mb-3">Add Member by Email</h3>
-                    <div className="flex gap-3">
+                  <form onSubmit={handleInviteMember} className="mb-4 p-3 bg-muted/30 rounded-lg border border-border">
+                    <h3 className="font-medium text-foreground text-sm mb-2">Add Member by Email</h3>
+                    <div className="flex flex-col sm:flex-row gap-2">
                       <input
                         type="email"
                         value={inviteEmail}
                         onChange={(e) => setInviteEmail(e.target.value)}
                         placeholder="user@example.com"
-                        className="input-field flex-1"
+                        className="input-field flex-1 text-sm"
                         required
                       />
-                      <select
-                        value={inviteRole}
-                        onChange={(e) => setInviteRole(e.target.value as OrgRole)}
-                        className="input-field w-32"
-                      >
-                        {ORG_ROLES.filter(r => r.value !== 'owner').map((role) => (
-                          <option key={role.value} value={role.value}>
-                            {role.label}
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        type="submit"
-                        disabled={inviting || !inviteEmail}
-                        className="btn-primary flex items-center gap-2 disabled:opacity-50"
-                      >
-                        {inviting ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
-                        Add
-                      </button>
+                      <div className="flex gap-2">
+                        <select
+                          value={inviteRole}
+                          onChange={(e) => setInviteRole(e.target.value as OrgRole)}
+                          className="input-field w-28 text-sm"
+                        >
+                          {ORG_ROLES.filter(r => r.value !== 'owner').map((role) => (
+                            <option key={role.value} value={role.value}>
+                              {role.label}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="submit"
+                          disabled={inviting || !inviteEmail}
+                          className="btn-primary flex items-center gap-1.5 text-sm px-3 disabled:opacity-50"
+                        >
+                          {inviting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UserPlus className="w-3.5 h-3.5" />}
+                          Add
+                        </button>
+                      </div>
                     </div>
                     <p className="text-xs text-muted-foreground mt-2">
-                      The user must have an existing account to be added.
+                      User must have an account to be added.
                     </p>
                   </form>
                 )}
@@ -678,40 +680,40 @@ export default function Organizations() {
                           <div
                             key={member.user_id}
                             className={cn(
-                              "flex items-center justify-between p-3 rounded-lg border",
+                              "flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-lg border",
                               isCurrentUser ? "border-primary/30 bg-primary/5" : "border-border"
                             )}
                           >
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2.5 min-w-0">
                               <div className={cn(
-                                "w-10 h-10 rounded-full flex items-center justify-center font-semibold text-sm",
+                                "w-8 h-8 rounded-full flex items-center justify-center font-semibold text-xs shrink-0",
                                 getRoleBadgeStyle(member.role)
                               )}>
                                 {(member.profile?.display_name || 'U').split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
                               </div>
-                              <div>
-                                <div className="flex items-center gap-2">
-                                  <p className="font-medium text-foreground">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <p className="font-medium text-foreground text-sm truncate">
                                     {member.profile?.display_name || 'Unknown'}
                                   </p>
                                   {isCurrentUser && (
-                                    <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full">
+                                    <span className="text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded-full shrink-0">
                                       You
                                     </span>
                                   )}
                                 </div>
-                                <p className="text-sm text-muted-foreground">{member.profile?.email}</p>
+                                <p className="text-xs text-muted-foreground truncate">{member.profile?.email}</p>
                               </div>
                             </div>
 
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1.5 shrink-0">
                               {/* Role Dropdown */}
                               <div className="relative">
                                 <button
                                   onClick={() => canEdit && setOpenRoleDropdown(openRoleDropdown === member.user_id ? null : member.user_id)}
                                   disabled={!canEdit || isUpdating}
                                   className={cn(
-                                    "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-all",
+                                    "flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs transition-all",
                                     canEdit 
                                       ? "border border-border hover:bg-muted/50 cursor-pointer" 
                                       : "bg-muted/30 cursor-default",
@@ -723,7 +725,7 @@ export default function Organizations() {
                                   ) : (
                                     <>
                                       {getRoleIcon(member.role)}
-                                      <span className="capitalize">{member.role}</span>
+                                      <span className="capitalize hidden sm:inline">{member.role}</span>
                                       {canEdit && <ChevronDown className="w-3 h-3" />}
                                     </>
                                   )}
