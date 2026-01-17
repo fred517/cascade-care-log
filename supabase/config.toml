@@ -23,3 +23,6 @@ verify_jwt = false
 
 [functions.generate-plume-predictions]
 verify_jwt = false
+
+[functions.send-calibration-reminders]
+verify_jwt = false

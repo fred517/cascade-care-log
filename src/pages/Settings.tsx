@@ -4,6 +4,7 @@ import { EmailRecipients } from '@/components/settings/EmailRecipients';
 import { SiteSettings } from '@/components/settings/SiteSettings';
 import { UserManagement } from '@/components/settings/UserManagement';
 import { SiteMemberManagement } from '@/components/settings/SiteMemberManagement';
+import CalibrationManager from '@/components/settings/CalibrationManager';
 import { Threshold, MetricType, METRICS } from '@/types/wastewater';
 import { useReadings } from '@/hooks/useReadings';
 import { useSite } from '@/hooks/useSite';
@@ -11,10 +12,10 @@ import { useAuth } from '@/hooks/useAuth';
 import { useMissingReadingsReminder } from '@/hooks/useMissingReadingsReminder';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
-import { Sliders, Bell, Users, Building2, Check, RotateCcw, Loader2, Send, AlertCircle, CheckCircle2, FileText, ShieldAlert, UserCog, UsersRound } from 'lucide-react';
+import { Sliders, Bell, Users, Building2, Check, RotateCcw, Loader2, Send, AlertCircle, CheckCircle2, FileText, ShieldAlert, UserCog, UsersRound, Wrench } from 'lucide-react';
 import { toast } from 'sonner';
 
-type SettingsTab = 'thresholds' | 'notifications' | 'team' | 'site-members' | 'users' | 'site';
+type SettingsTab = 'thresholds' | 'calibrations' | 'notifications' | 'team' | 'site-members' | 'users' | 'site';
 
 export default function Settings() {
   const { site, loading: siteLoading } = useSite();
@@ -84,6 +85,7 @@ export default function Settings() {
 
   const tabs = [
     { key: 'thresholds' as const, label: 'Thresholds', icon: Sliders },
+    { key: 'calibrations' as const, label: 'Calibrations', icon: Wrench },
     { key: 'notifications' as const, label: 'Notifications', icon: Bell },
     { key: 'team' as const, label: 'Team', icon: Users },
     { key: 'site-members' as const, label: 'Site Members', icon: UsersRound },
@@ -602,6 +604,10 @@ export default function Settings() {
 
           {activeTab === 'users' && (
             <UserManagement teamMembers={teamMembers} onRoleUpdated={fetchTeam} />
+          )}
+
+          {activeTab === 'calibrations' && (
+            <CalibrationManager />
           )}
 
           {activeTab === 'site' && (
