@@ -19,9 +19,13 @@ const generateMockReadings = (): Reading[] => {
     date.setDate(date.getDate() - day);
     date.setHours(8, 0, 0, 0);
 
-    Object.keys(METRICS).forEach((metricId) => {
+    // Only generate readings for parameters that have defined ranges
+    Object.keys(metricRanges).forEach((metricId) => {
       const metric = metricId as MetricType;
-      const { base, variance } = metricRanges[metric];
+      const range = metricRanges[metric];
+      if (!range) return;
+      
+      const { base, variance } = range;
       const value = Math.max(0, base + (Math.random() - 0.5) * variance * 2);
       
       readings.push({
@@ -200,7 +204,7 @@ export const mockPlaybooks: ActionPlaybook[] = [
   },
   {
     id: 'playbook-ammonia-high',
-    metricId: 'ammonia',
+    metricId: 'ammonia_tan',
     condition: 'high',
     title: 'High Ammonia Response - Nitrification Issue',
     steps: [
