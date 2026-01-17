@@ -221,36 +221,86 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
           draggable={false}
         />
         
-        {/* Predicted plume polygons from odour_predictions */}
+        {/* Predicted plume polygons with intensity contours */}
         {showPredictions && predictions.length > 0 && (
           <svg 
             className="absolute inset-0 w-full h-full pointer-events-none z-[1]"
             viewBox="0 0 100 100"
             preserveAspectRatio="none"
           >
+            <defs>
+              {/* Gradient definitions for contour colors */}
+              <linearGradient id="contour-high" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="hsl(var(--destructive))" stopOpacity="0.7" />
+                <stop offset="100%" stopColor="hsl(var(--destructive))" stopOpacity="0.5" />
+              </linearGradient>
+              <linearGradient id="contour-medium" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="hsl(var(--chart-2))" stopOpacity="0.5" />
+                <stop offset="100%" stopColor="hsl(var(--chart-2))" stopOpacity="0.3" />
+              </linearGradient>
+              <linearGradient id="contour-low" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="hsl(var(--chart-3))" stopOpacity="0.3" />
+                <stop offset="100%" stopColor="hsl(var(--chart-3))" stopOpacity="0.15" />
+              </linearGradient>
+            </defs>
+            
             {predictions.map((prediction) => {
               if (!prediction.geometry?.coordinates?.length) return null;
               
-              const points = prediction.geometry.coordinates
+              const contours = prediction.geometry.contours || [];
+              const outerPoints = prediction.geometry.coordinates
                 .map(c => `${c.x},${c.y}`)
                 .join(' ');
               
-              const intensity = prediction.peak_intensity || 3;
-              const opacity = Math.min(0.15 + (intensity * 0.08), 0.6);
+              // Contour colors and opacities
+              const contourStyles: Record<string, { fill: string; opacity: number; stroke: string }> = {
+                high: { fill: 'hsl(var(--destructive))', opacity: 0.55, stroke: 'hsl(var(--destructive))' },
+                medium: { fill: 'hsl(var(--chart-2))', opacity: 0.4, stroke: 'hsl(var(--chart-2))' },
+                low: { fill: 'hsl(var(--chart-3))', opacity: 0.25, stroke: 'hsl(var(--chart-3))' },
+              };
               
               return (
-                <polygon
-                  key={`pred-${prediction.id}`}
-                  points={points}
-                  fill="hsl(var(--chart-3))"
-                  fillOpacity={opacity}
-                  stroke="hsl(var(--chart-3))"
-                  strokeWidth="0.3"
-                  strokeOpacity={0.8}
-                  className="pointer-events-auto cursor-pointer transition-opacity hover:fill-opacity-[0.5]"
-                  onMouseEnter={() => setHoveredPrediction(prediction.id)}
-                  onMouseLeave={() => setHoveredPrediction(null)}
-                />
+                <g key={`pred-group-${prediction.id}`}>
+                  {/* Outer boundary (lowest intensity) */}
+                  <polygon
+                    points={outerPoints}
+                    fill="hsl(var(--chart-3))"
+                    fillOpacity={0.15}
+                    stroke="hsl(var(--chart-3))"
+                    strokeWidth="0.2"
+                    strokeOpacity={0.4}
+                    strokeDasharray="1,1"
+                  />
+                  
+                  {/* Intensity contours (render from outer to inner) */}
+                  {[...contours].reverse().map((contour, idx) => {
+                    const contourPoints = contour.coordinates
+                      .map(c => `${c.x},${c.y}`)
+                      .join(' ');
+                    const style = contourStyles[contour.level] || contourStyles.low;
+                    
+                    return (
+                      <polygon
+                        key={`contour-${prediction.id}-${contour.level}-${idx}`}
+                        points={contourPoints}
+                        fill={style.fill}
+                        fillOpacity={style.opacity}
+                        stroke={style.stroke}
+                        strokeWidth="0.25"
+                        strokeOpacity={0.6}
+                      />
+                    );
+                  })}
+                  
+                  {/* Interactive overlay for hover */}
+                  <polygon
+                    points={outerPoints}
+                    fill="transparent"
+                    className="pointer-events-auto cursor-pointer"
+                    onMouseEnter={() => setHoveredPrediction(prediction.id)}
+                    onMouseLeave={() => setHoveredPrediction(null)}
+                  />
+                </g>
               );
             })}
           </svg>
@@ -457,12 +507,25 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
           </div>
           <span>Odour source</span>
         </div>
+        
+        {/* Prediction contour legend */}
         {showPredictions && predictions.length > 0 && (
-          <div className="flex items-center gap-1.5">
-            <div className="w-4 h-3 rounded bg-chart-3/40 border border-chart-3" />
-            <span>Predicted plume ({predictions.length})</span>
-          </div>
+          <>
+            <div className="flex items-center gap-1.5">
+              <div className="w-4 h-3 rounded bg-destructive/55 border border-destructive/60" />
+              <span>High (&gt;80%)</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-4 h-3 rounded bg-chart-2/40 border border-chart-2/60" />
+              <span>Medium (50-80%)</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-4 h-3 rounded bg-chart-3/25 border border-chart-3/40" />
+              <span>Low (20-50%)</span>
+            </div>
+          </>
         )}
+        
         <div className="flex items-center gap-1.5">
           <div className="w-3 h-3 rounded-full bg-red-500" />
           <span>High intensity incident</span>

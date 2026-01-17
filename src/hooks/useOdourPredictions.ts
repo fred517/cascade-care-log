@@ -2,9 +2,17 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useSite } from './useSite';
 
+export interface ContourPolygon {
+  level: 'high' | 'medium' | 'low';
+  threshold: number;
+  intensity: number;
+  coordinates: Array<{ x: number; y: number }>;
+}
+
 export interface PlumeGeometry {
   type: 'polygon';
   coordinates: Array<{ x: number; y: number }>;
+  contours?: ContourPolygon[];
 }
 
 export interface OdourPrediction {

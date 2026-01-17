@@ -53,8 +53,23 @@ function intensityAtDistance(baseIntensity: number, distance: number, maxDistanc
   return baseIntensity * Math.exp(-distance / (maxDistance * 0.6));
 }
 
+// Intensity thresholds for contours (as fraction of peak)
+const CONTOUR_LEVELS = [
+  { threshold: 0.8, label: "high" },
+  { threshold: 0.5, label: "medium" },
+  { threshold: 0.2, label: "low" },
+];
+
+interface ContourPolygon {
+  level: string;
+  threshold: number;
+  intensity: number;
+  coordinates: PlumePoint[];
+}
+
 interface PlumeResult {
   geometry: PlumePoint[];
+  contours: ContourPolygon[];
   intensityProfile: { distance: number; intensity: number }[];
 }
 
@@ -90,53 +105,80 @@ function generatePlume(
   const px = Math.cos(windRadians);
   const py = Math.sin(windRadians);
   
-  // Generate downwind cone polygon
-  const points: PlumePoint[] = [];
-  const segments = 16;
-  
-  // Starting point (source - slight offset for visual)
-  points.push({ x: sourceX, y: sourceY });
-  
-  // Right edge of cone (expanding outward)
-  for (let i = 1; i <= segments; i++) {
-    const t = i / segments;
-    const dist = distance * t;
-    const width = plumeWidth * t * 0.5; // Half-width on each side
+  // Helper to generate cone at a specific distance fraction
+  const generateConeAtFraction = (fraction: number): PlumePoint[] => {
+    const conePoints: PlumePoint[] = [];
+    const coneDistance = distance * fraction;
+    const coneWidth = plumeWidth * fraction;
+    const segments = 12;
     
-    const centerX = sourceX + dx * dist;
-    const centerY = sourceY + dy * dist;
+    // Starting point (source)
+    conePoints.push({ x: sourceX, y: sourceY });
     
-    points.push({
-      x: centerX + px * width,
-      y: centerY + py * width,
+    // Right edge
+    for (let i = 1; i <= segments; i++) {
+      const t = i / segments;
+      const dist = coneDistance * t;
+      const width = coneWidth * t * 0.5;
+      
+      const centerX = sourceX + dx * dist;
+      const centerY = sourceY + dy * dist;
+      
+      conePoints.push({
+        x: centerX + px * width,
+        y: centerY + py * width,
+      });
+    }
+    
+    // Tip
+    conePoints.push({
+      x: sourceX + dx * coneDistance,
+      y: sourceY + dy * coneDistance,
     });
-  }
-  
-  // Tip of cone (rounded end)
-  const tipX = sourceX + dx * distance;
-  const tipY = sourceY + dy * distance;
-  points.push({ x: tipX, y: tipY });
-  
-  // Left edge of cone (contracting back to source)
-  for (let i = segments; i >= 1; i--) {
-    const t = i / segments;
-    const dist = distance * t;
-    const width = plumeWidth * t * 0.5;
     
-    const centerX = sourceX + dx * dist;
-    const centerY = sourceY + dy * dist;
+    // Left edge
+    for (let i = segments; i >= 1; i--) {
+      const t = i / segments;
+      const dist = coneDistance * t;
+      const width = coneWidth * t * 0.5;
+      
+      const centerX = sourceX + dx * dist;
+      const centerY = sourceY + dy * dist;
+      
+      conePoints.push({
+        x: centerX - px * width,
+        y: centerY - py * width,
+      });
+    }
     
-    points.push({
-      x: centerX - px * width,
-      y: centerY - py * width,
-    });
-  }
+    return conePoints.map(p => ({
+      x: Math.max(0, Math.min(100, p.x)),
+      y: Math.max(0, Math.min(100, p.y)),
+    }));
+  };
   
-  // Clamp coordinates to 0-100 range
-  const clampedPoints = points.map(p => ({
-    x: Math.max(0, Math.min(100, p.x)),
-    y: Math.max(0, Math.min(100, p.y)),
-  }));
+  // Generate outer plume polygon (full extent)
+  const outerPolygon = generateConeAtFraction(1.0);
+  
+  // Generate intensity contours
+  // For exponential decay I(d) = I0 * exp(-d / (D * 0.6))
+  // Solve for d where I(d) = threshold * I0: d = -ln(threshold) * D * 0.6
+  const contours: ContourPolygon[] = [];
+  
+  for (const level of CONTOUR_LEVELS) {
+    // Distance fraction where intensity equals threshold
+    const distanceFraction = Math.min(1.0, -Math.log(level.threshold) * 0.6);
+    const contourIntensity = baseIntensity * level.threshold;
+    
+    if (distanceFraction > 0.05) { // Only add if visible
+      contours.push({
+        level: level.label,
+        threshold: level.threshold,
+        intensity: Math.round(contourIntensity * 10) / 10,
+        coordinates: generateConeAtFraction(distanceFraction),
+      });
+    }
+  }
   
   // Calculate intensity profile along plume
   const intensityProfile = [];
@@ -149,7 +191,8 @@ function generatePlume(
   }
   
   return {
-    geometry: clampedPoints,
+    geometry: outerPolygon,
+    contours,
     intensityProfile,
   };
 }
@@ -273,9 +316,10 @@ Deno.serve(async (req) => {
         geometry: {
           type: "polygon",
           coordinates: plumeResult.geometry,
+          contours: plumeResult.contours,
         },
         peak_intensity: Math.round(peakIntensity * 10) / 10,
-        model_version: "plume-v2.0",
+        model_version: "plume-v2.1",
       };
 
       predictions.push(prediction);
