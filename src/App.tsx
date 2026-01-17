@@ -16,6 +16,7 @@ import Auth from "./pages/Auth";
 import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
 import OdourMap from "./pages/OdourMap";
+import Organizations from "./pages/Organizations";
 
 const queryClient = new QueryClient();
 
@@ -90,6 +91,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <OdourMap />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/organizations"
+              element={
+                <ProtectedRoute>
+                  <Organizations />
                 </ProtectedRoute>
               }
             />
