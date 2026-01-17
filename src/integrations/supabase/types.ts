@@ -1009,6 +1009,7 @@ export type Database = {
         Args: { _site_id: string; _user_id: string }
         Returns: boolean
       }
+      is_support: { Args: never; Returns: boolean }
     }
     Enums: {
       app_role: "operator" | "supervisor" | "admin"
