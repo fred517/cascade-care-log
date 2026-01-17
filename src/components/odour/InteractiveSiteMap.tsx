@@ -266,28 +266,60 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
               }
             : { x: 50, y: 50 };
           
+          // Calculate time remaining
+          const now = new Date();
+          const validTo = pred.valid_to ? new Date(pred.valid_to) : null;
+          const minutesRemaining = validTo ? Math.max(0, Math.round((validTo.getTime() - now.getTime()) / 60000)) : null;
+          
           return (
             <div
-              className="absolute z-20 bg-popover text-popover-foreground rounded-lg p-2 shadow-lg text-xs pointer-events-none"
+              className="absolute z-20 bg-popover text-popover-foreground rounded-lg p-3 shadow-lg text-xs pointer-events-none min-w-[180px]"
               style={{
                 left: `${centroid.x}%`,
                 top: `${centroid.y}%`,
                 transform: 'translate(-50%, -100%)',
               }}
             >
-              <p className="font-semibold">Predicted Plume</p>
-              <p className="text-muted-foreground">
-                Intensity: {pred.peak_intensity || 'N/A'}
-              </p>
-              {pred.valid_from && (
-                <p className="text-muted-foreground">
-                  Valid: {new Date(pred.valid_from).toLocaleTimeString()}
-                  {pred.valid_to && ` - ${new Date(pred.valid_to).toLocaleTimeString()}`}
-                </p>
-              )}
-              {pred.model_version && (
-                <p className="text-muted-foreground text-[10px]">Model: {pred.model_version}</p>
-              )}
+              <p className="font-semibold text-sm mb-1.5">Predicted Plume</p>
+              
+              <div className="space-y-1">
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">Peak Intensity:</span>
+                  <span className="font-medium">{pred.peak_intensity?.toFixed(1) || 'N/A'}</span>
+                </div>
+                
+                {pred.valid_from && (
+                  <div className="flex justify-between gap-3">
+                    <span className="text-muted-foreground">Valid From:</span>
+                    <span className="font-medium">{new Date(pred.valid_from).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                  </div>
+                )}
+                
+                {pred.valid_to && (
+                  <div className="flex justify-between gap-3">
+                    <span className="text-muted-foreground">Valid Until:</span>
+                    <span className="font-medium">{new Date(pred.valid_to).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                  </div>
+                )}
+                
+                {minutesRemaining !== null && (
+                  <div className="flex justify-between gap-3">
+                    <span className="text-muted-foreground">Expires in:</span>
+                    <span className={cn("font-medium", minutesRemaining < 15 ? "text-destructive" : "text-green-600")}>
+                      {minutesRemaining > 0 ? `${minutesRemaining} min` : 'Expired'}
+                    </span>
+                  </div>
+                )}
+                
+                {pred.model_version && (
+                  <div className="pt-1 mt-1 border-t border-border">
+                    <div className="flex justify-between gap-3">
+                      <span className="text-muted-foreground">Model:</span>
+                      <span className="font-mono text-[10px]">{pred.model_version}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           );
         })()}
