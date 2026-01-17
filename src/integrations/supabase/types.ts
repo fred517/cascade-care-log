@@ -68,6 +68,109 @@ export type Database = {
         }
         Relationships: []
       }
+      calibration_logs: {
+        Row: {
+          calibrated_at: string
+          calibrated_by: string
+          created_at: string
+          deviation_percent: number | null
+          id: string
+          notes: string | null
+          passed: boolean
+          post_cal_reading: number | null
+          pre_cal_reading: number | null
+          reference_value: number | null
+          schedule_id: string
+        }
+        Insert: {
+          calibrated_at?: string
+          calibrated_by: string
+          created_at?: string
+          deviation_percent?: number | null
+          id?: string
+          notes?: string | null
+          passed?: boolean
+          post_cal_reading?: number | null
+          pre_cal_reading?: number | null
+          reference_value?: number | null
+          schedule_id: string
+        }
+        Update: {
+          calibrated_at?: string
+          calibrated_by?: string
+          created_at?: string
+          deviation_percent?: number | null
+          id?: string
+          notes?: string | null
+          passed?: boolean
+          post_cal_reading?: number | null
+          pre_cal_reading?: number | null
+          reference_value?: number | null
+          schedule_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calibration_logs_schedule_id_fkey"
+            columns: ["schedule_id"]
+            isOneToOne: false
+            referencedRelation: "calibration_schedules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      calibration_schedules: {
+        Row: {
+          assigned_to: string | null
+          created_at: string
+          id: string
+          interval_days: number
+          is_active: boolean
+          last_calibration_at: string | null
+          meter_name: string
+          meter_type: string
+          next_due_at: string | null
+          notes: string | null
+          site_id: string
+          updated_at: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          created_at?: string
+          id?: string
+          interval_days?: number
+          is_active?: boolean
+          last_calibration_at?: string | null
+          meter_name: string
+          meter_type?: string
+          next_due_at?: string | null
+          notes?: string | null
+          site_id: string
+          updated_at?: string
+        }
+        Update: {
+          assigned_to?: string | null
+          created_at?: string
+          id?: string
+          interval_days?: number
+          is_active?: boolean
+          last_calibration_at?: string | null
+          meter_name?: string
+          meter_type?: string
+          next_due_at?: string | null
+          notes?: string | null
+          site_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calibration_schedules_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       comparison_annotations: {
         Row: {
           comparison_type: string
