@@ -72,7 +72,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
             <Droplets className="w-6 h-6 text-primary" />
           </div>
-          <span className="font-semibold text-lg">WaterOps</span>
+          <span className="font-semibold text-lg">Water Ops</span>
         </div>
         <button 
           onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -93,8 +93,8 @@ export function AppLayout({ children }: AppLayoutProps) {
             <Droplets className="w-6 h-6 text-primary" />
           </div>
           <div>
-            <h1 className="font-bold text-lg">WaterOps</h1>
-            <p className="text-xs text-muted-foreground">Operator Dashboard</p>
+            <h1 className="font-bold text-lg">Water Ops</h1>
+            <p className="text-xs text-muted-foreground">Monitoring Dashboard</p>
           </div>
         </div>
 
