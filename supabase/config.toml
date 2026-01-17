@@ -1,1 +1,10 @@
 project_id = "pzbyierrmmxcktpjfiac"
+
+[functions.send-alert-email]
+verify_jwt = false
+
+[functions.send-missing-readings-reminder]
+verify_jwt = false
+
+[functions.get-weather]
+verify_jwt = true
