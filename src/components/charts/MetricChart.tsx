@@ -11,11 +11,11 @@ import {
   Area,
   ComposedChart
 } from 'recharts';
-import { Reading, Threshold, METRICS, MetricType } from '@/types/wastewater';
+import { Reading, Threshold, PARAMETERS, ParameterKey, getDefaultThresholds } from '@/types/wastewater';
 import { format } from 'date-fns';
 
 interface MetricChartProps {
-  metricId: MetricType;
+  metricId: ParameterKey;
   readings: Reading[];
   threshold?: Threshold;
   days?: number;
@@ -29,7 +29,8 @@ export function MetricChart({
   days = 30,
   showThresholdBands = true 
 }: MetricChartProps) {
-  const metric = METRICS[metricId];
+  const param = PARAMETERS[metricId];
+  const defaults = getDefaultThresholds(param);
 
   const chartData = useMemo(() => {
     const cutoff = new Date();
@@ -48,23 +49,23 @@ export function MetricChart({
       return {
         date: reading.timestamp,
         value: reading.value,
-        rollingAvg: Number(avg.toFixed(metric.precision)),
-        min: threshold?.min ?? metric.defaultMin,
-        max: threshold?.max ?? metric.defaultMax,
+        rollingAvg: Number(avg.toFixed(param.decimals)),
+        min: threshold?.min ?? defaults.min,
+        max: threshold?.max ?? defaults.max,
       };
     });
-  }, [readings, metricId, threshold, days, metric]);
+  }, [readings, metricId, threshold, days, param, defaults]);
 
   const domain = useMemo(() => {
     if (chartData.length === 0) return [0, 100];
     
     const values = chartData.map(d => d.value);
-    const min = Math.min(...values, threshold?.min ?? metric.defaultMin);
-    const max = Math.max(...values, threshold?.max ?? metric.defaultMax);
+    const min = Math.min(...values, threshold?.min ?? defaults.min);
+    const max = Math.max(...values, threshold?.max ?? defaults.max);
     const padding = (max - min) * 0.1;
     
     return [Math.floor(min - padding), Math.ceil(max + padding)];
-  }, [chartData, threshold, metric]);
+  }, [chartData, threshold, defaults]);
 
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload?.length) return null;
@@ -80,7 +81,7 @@ export function MetricChart({
             <div className="w-2 h-2 rounded-full bg-primary" />
             <span className="text-sm">
               <span className="font-mono font-medium">{data.value}</span>
-              <span className="text-muted-foreground ml-1">{metric.unit}</span>
+              <span className="text-muted-foreground ml-1">{param.unit}</span>
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -134,16 +135,16 @@ export function MetricChart({
             fontSize={11}
             tickLine={false}
             axisLine={false}
-            tickFormatter={(value) => value.toFixed(metric.precision > 0 ? 1 : 0)}
+            tickFormatter={(value) => value.toFixed(param.decimals > 0 ? 1 : 0)}
           />
           
           <Tooltip content={<CustomTooltip />} />
 
           {/* Threshold reference lines */}
-          {showThresholdBands && threshold && (
+          {showThresholdBands && (
             <>
               <ReferenceLine 
-                y={threshold.max} 
+                y={threshold?.max ?? defaults.max} 
                 stroke="hsl(var(--status-warning))" 
                 strokeDasharray="5 5"
                 label={{ 
@@ -154,7 +155,7 @@ export function MetricChart({
                 }}
               />
               <ReferenceLine 
-                y={threshold.min} 
+                y={threshold?.min ?? defaults.min} 
                 stroke="hsl(var(--status-warning))" 
                 strokeDasharray="5 5"
                 label={{ 
