@@ -1,19 +1,21 @@
 import { useState, useMemo } from 'react';
-import { Plus, Map, List, FileText, History, Calendar, Filter } from 'lucide-react';
+import { Plus, Map, List, FileText, History, Calendar, BarChart3 } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useSiteMaps, useOdourIncidents } from '@/hooks/useOdourMapping';
 import SiteMapUpload from '@/components/odour/SiteMapUpload';
 import InteractiveSiteMap from '@/components/odour/InteractiveSiteMap';
 import OdourIncidentForm from '@/components/odour/OdourIncidentForm';
 import OdourIncidentReport from '@/components/odour/OdourIncidentReport';
-import { format, startOfMonth, endOfMonth, isWithinInterval, subMonths } from 'date-fns';
-import { ODOUR_TYPES, INCIDENT_STATUSES, type OdourIncident, type SiteMap } from '@/types/odour';
+import { format, startOfMonth, endOfMonth, isWithinInterval, subMonths, startOfWeek, eachWeekOfInterval, eachMonthOfInterval } from 'date-fns';
+import { ODOUR_TYPES, INCIDENT_STATUSES, FIDOL_SCALE, type OdourIncident, type SiteMap } from '@/types/odour';
 import { cn } from '@/lib/utils';
 import type { DateRange } from 'react-day-picker';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend } from 'recharts';
 
 export default function OdourMap() {
   const [showUpload, setShowUpload] = useState(false);
@@ -61,6 +63,97 @@ export default function OdourMap() {
   // Active (non-resolved) incidents count
   const activeIncidents = incidents.filter(i => i.status === 'open' || i.status === 'investigating');
 
+  // Analytics data
+  const analyticsData = useMemo(() => {
+    if (incidents.length === 0) return null;
+
+    // Apply date range filter for analytics
+    const filteredIncidents = incidents.filter(incident => {
+      if (dateRange?.from && dateRange?.to) {
+        const incidentDate = new Date(incident.incident_at);
+        return isWithinInterval(incidentDate, { start: dateRange.from, end: dateRange.to });
+      }
+      return true;
+    });
+
+    // Incidents over time (by month)
+    const timeRange = dateRange?.from && dateRange?.to 
+      ? { start: dateRange.from, end: dateRange.to }
+      : { start: subMonths(new Date(), 11), end: new Date() };
+    
+    const months = eachMonthOfInterval(timeRange);
+    const incidentsOverTime = months.map(month => {
+      const monthStart = startOfMonth(month);
+      const monthEnd = endOfMonth(month);
+      const count = filteredIncidents.filter(i => {
+        const date = new Date(i.incident_at);
+        return date >= monthStart && date <= monthEnd;
+      }).length;
+      return {
+        month: format(month, 'MMM yyyy'),
+        incidents: count,
+      };
+    });
+
+    // By odour type
+    const byType: Record<string, number> = {};
+    filteredIncidents.forEach(incident => {
+      const type = incident.odour_type || 'unknown';
+      byType[type] = (byType[type] || 0) + 1;
+    });
+    const typeData = Object.entries(byType)
+      .map(([type, count]) => ({
+        name: ODOUR_TYPES.find(t => t.value === type)?.label || type,
+        value: count,
+        type,
+      }))
+      .sort((a, b) => b.value - a.value);
+
+    // By intensity
+    const byIntensity = [1, 2, 3, 4, 5].map(level => ({
+      level: `${level}`,
+      label: FIDOL_SCALE.intensity.find(i => i.value === level)?.label || '',
+      count: filteredIncidents.filter(i => i.intensity === level).length,
+    }));
+
+    // By status
+    const byStatus = INCIDENT_STATUSES.map(status => ({
+      status: status.label,
+      count: filteredIncidents.filter(i => i.status === status.value).length,
+      color: status.color,
+    }));
+
+    // Summary stats
+    const avgIntensity = filteredIncidents.filter(i => i.intensity).length > 0
+      ? filteredIncidents.reduce((sum, i) => sum + (i.intensity || 0), 0) / filteredIncidents.filter(i => i.intensity).length
+      : 0;
+
+    return {
+      incidentsOverTime,
+      typeData,
+      byIntensity,
+      byStatus,
+      totalIncidents: filteredIncidents.length,
+      avgIntensity: avgIntensity.toFixed(1),
+      highIntensityCount: filteredIncidents.filter(i => (i.intensity || 0) >= 4).length,
+    };
+  }, [incidents, dateRange]);
+
+  const CHART_COLORS = [
+    'hsl(var(--primary))',
+    'hsl(var(--chart-2))',
+    'hsl(var(--chart-3))',
+    'hsl(var(--chart-4))',
+    'hsl(var(--chart-5))',
+    '#f97316',
+    '#14b8a6',
+    '#8b5cf6',
+    '#ec4899',
+    '#06b6d4',
+  ];
+
+  const INTENSITY_COLORS = ['#22c55e', '#84cc16', '#eab308', '#f97316', '#ef4444'];
+
   return (
     <AppLayout>
       <div className="p-6 space-y-6">
@@ -88,6 +181,10 @@ export default function OdourMap() {
             <TabsTrigger value="history" className="flex items-center gap-2">
               <History className="w-4 h-4" />
               History ({resolvedIncidents.length})
+            </TabsTrigger>
+            <TabsTrigger value="analytics" className="flex items-center gap-2">
+              <BarChart3 className="w-4 h-4" />
+              Analytics
             </TabsTrigger>
           </TabsList>
 
@@ -284,6 +381,250 @@ export default function OdourMap() {
                   );
                 })}
               </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="analytics" className="space-y-6">
+            {/* Date Range Filter for Analytics */}
+            <div className="flex items-center gap-4 flex-wrap">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="justify-start text-left font-normal">
+                    <Calendar className="w-4 h-4 mr-2" />
+                    {dateRange?.from ? (
+                      dateRange.to ? (
+                        <>
+                          {format(dateRange.from, 'LLL dd, y')} - {format(dateRange.to, 'LLL dd, y')}
+                        </>
+                      ) : (
+                        format(dateRange.from, 'LLL dd, y')
+                      )
+                    ) : (
+                      <span>Pick a date range</span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <CalendarComponent
+                    initialFocus
+                    mode="range"
+                    defaultMonth={dateRange?.from}
+                    selected={dateRange}
+                    onSelect={setDateRange}
+                    numberOfMonths={2}
+                  />
+                </PopoverContent>
+              </Popover>
+              
+              <div className="flex gap-2">
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={() => setDateRange({
+                    from: subMonths(startOfMonth(new Date()), 0),
+                    to: endOfMonth(new Date()),
+                  })}
+                >
+                  This Month
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={() => setDateRange({
+                    from: subMonths(startOfMonth(new Date()), 2),
+                    to: endOfMonth(new Date()),
+                  })}
+                >
+                  Last 3 Months
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={() => setDateRange({
+                    from: subMonths(startOfMonth(new Date()), 11),
+                    to: endOfMonth(new Date()),
+                  })}
+                >
+                  Last Year
+                </Button>
+              </div>
+            </div>
+
+            {incidentsLoading ? (
+              <div className="text-center py-12 text-muted-foreground">Loading...</div>
+            ) : !analyticsData || analyticsData.totalIncidents === 0 ? (
+              <div className="text-center py-12 border-2 border-dashed rounded-xl">
+                <BarChart3 className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                <h3 className="font-semibold mb-2">No Data Available</h3>
+                <p className="text-muted-foreground">
+                  Record odour incidents to see analytics
+                </p>
+              </div>
+            ) : (
+              <>
+                {/* Summary Stats */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium text-muted-foreground">Total Incidents</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-3xl font-bold">{analyticsData.totalIncidents}</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium text-muted-foreground">Avg. Intensity</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-3xl font-bold">{analyticsData.avgIntensity}<span className="text-lg text-muted-foreground">/5</span></p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium text-muted-foreground">High Intensity (4-5)</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-3xl font-bold text-red-500">{analyticsData.highIntensityCount}</p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Incidents Over Time */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Incidents Over Time</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="h-[300px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={analyticsData.incidentsOverTime}>
+                          <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                          <XAxis 
+                            dataKey="month" 
+                            className="text-xs"
+                            tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                          />
+                          <YAxis 
+                            allowDecimals={false}
+                            tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                          />
+                          <Tooltip 
+                            contentStyle={{ 
+                              backgroundColor: 'hsl(var(--card))',
+                              border: '1px solid hsl(var(--border))',
+                              borderRadius: '8px',
+                            }}
+                          />
+                          <Bar 
+                            dataKey="incidents" 
+                            fill="hsl(var(--primary))" 
+                            radius={[4, 4, 0, 0]}
+                          />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* By Odour Type */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>By Odour Type</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="h-[300px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie
+                              data={analyticsData.typeData}
+                              cx="50%"
+                              cy="50%"
+                              labelLine={false}
+                              label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
+                              outerRadius={100}
+                              fill="#8884d8"
+                              dataKey="value"
+                            >
+                              {analyticsData.typeData.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                              ))}
+                            </Pie>
+                            <Tooltip 
+                              contentStyle={{ 
+                                backgroundColor: 'hsl(var(--card))',
+                                border: '1px solid hsl(var(--border))',
+                                borderRadius: '8px',
+                              }}
+                            />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* By Intensity */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>By Intensity Level</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="h-[300px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={analyticsData.byIntensity} layout="vertical">
+                            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                            <XAxis 
+                              type="number" 
+                              allowDecimals={false}
+                              tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                            />
+                            <YAxis 
+                              type="category" 
+                              dataKey="label" 
+                              width={100}
+                              tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                            />
+                            <Tooltip 
+                              contentStyle={{ 
+                                backgroundColor: 'hsl(var(--card))',
+                                border: '1px solid hsl(var(--border))',
+                                borderRadius: '8px',
+                              }}
+                              formatter={(value, name) => [value, 'Incidents']}
+                            />
+                            <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+                              {analyticsData.byIntensity.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={INTENSITY_COLORS[index]} />
+                              ))}
+                            </Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* By Status */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>By Status</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      {analyticsData.byStatus.map((status) => (
+                        <div 
+                          key={status.status} 
+                          className="text-center p-4 rounded-xl border border-border"
+                        >
+                          <p className="text-3xl font-bold">{status.count}</p>
+                          <p className="text-sm text-muted-foreground">{status.status}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </>
             )}
           </TabsContent>
         </Tabs>
