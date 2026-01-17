@@ -28,6 +28,33 @@ function getWindDirectionText(degrees: number): string {
   return directions[index];
 }
 
+function getWeatherDescription(weatherCode: number): string {
+  const descriptions: Record<number, string> = {
+    0: "Clear sky",
+    1: "Mainly clear",
+    2: "Partly cloudy",
+    3: "Overcast",
+    45: "Foggy",
+    48: "Depositing rime fog",
+    51: "Light drizzle",
+    53: "Moderate drizzle",
+    55: "Dense drizzle",
+    61: "Slight rain",
+    63: "Moderate rain",
+    65: "Heavy rain",
+    71: "Slight snow",
+    73: "Moderate snow",
+    75: "Heavy snow",
+    80: "Slight rain showers",
+    81: "Moderate rain showers",
+    82: "Violent rain showers",
+    95: "Thunderstorm",
+    96: "Thunderstorm with slight hail",
+    99: "Thunderstorm with heavy hail",
+  };
+  return descriptions[weatherCode] || "Unknown";
+}
+
 const handler = async (req: Request): Promise<Response> => {
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
@@ -35,12 +62,6 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const apiKey = Deno.env.get("OPENWEATHERMAP_API_KEY");
-    if (!apiKey) {
-      console.error("OPENWEATHERMAP_API_KEY not configured");
-      throw new Error("Weather API not configured");
-    }
-
     const { latitude, longitude }: WeatherRequest = await req.json();
 
     if (!latitude || !longitude) {
@@ -49,27 +70,31 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log(`Fetching weather for coordinates: ${latitude}, ${longitude}`);
 
-    const url = `https://api.openweathermap.org/data/2.5/weather?lat=${latitude}&lon=${longitude}&appid=${apiKey}&units=metric`;
+    // Using Open-Meteo API (free, no API key required)
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,weather_code,pressure_msl,wind_speed_10m,wind_direction_10m`;
     
     const response = await fetch(url);
     
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("OpenWeatherMap API error:", errorText);
+      console.error("Open-Meteo API error:", errorText);
       throw new Error(`Weather API error: ${response.status}`);
     }
 
     const data = await response.json();
     console.log("Weather data received:", JSON.stringify(data));
 
+    const current = data.current;
+    const windDirection = current.wind_direction_10m ?? 0;
+
     const weatherResponse: WeatherResponse = {
-      wind_speed: data.wind?.speed ?? 0,
-      wind_direction: data.wind?.deg ?? 0,
-      wind_direction_text: getWindDirectionText(data.wind?.deg ?? 0),
-      temperature: data.main?.temp ?? 0,
-      humidity: data.main?.humidity ?? 0,
-      pressure: data.main?.pressure ?? 0,
-      weather_description: data.weather?.[0]?.description ?? "Unknown",
+      wind_speed: current.wind_speed_10m ?? 0,
+      wind_direction: windDirection,
+      wind_direction_text: getWindDirectionText(windDirection),
+      temperature: current.temperature_2m ?? 0,
+      humidity: current.relative_humidity_2m ?? 0,
+      pressure: current.pressure_msl ?? 0,
+      weather_description: getWeatherDescription(current.weather_code ?? 0),
       fetched_at: new Date().toISOString(),
     };
 
