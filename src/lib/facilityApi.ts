@@ -1,5 +1,24 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 
+export async function fetchWeatherSnapshot(lat: number, lng: number) {
+  // Open-Meteo: no key required
+  const url =
+    `https://api.open-meteo.com/v1/forecast` +
+    `?latitude=${encodeURIComponent(lat)}` +
+    `&longitude=${encodeURIComponent(lng)}` +
+    `&current=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Weather fetch failed: ${res.status}`);
+  const json = await res.json();
+  const c = json?.current;
+  return {
+    temperature: typeof c?.temperature_2m === "number" ? c.temperature_2m : undefined,
+    humidity: typeof c?.relative_humidity_2m === "number" ? c.relative_humidity_2m : undefined,
+    wind_speed: typeof c?.wind_speed_10m === "number" ? c.wind_speed_10m : undefined,
+    wind_dir: typeof c?.wind_direction_10m === "number" ? c.wind_direction_10m : undefined,
+  };
+}
+
 export type FacilitySitemap = {
   id: string;
   facility_id: string;
