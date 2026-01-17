@@ -5,10 +5,11 @@ import { SiteSettings } from '@/components/settings/SiteSettings';
 import { Threshold, MetricType, METRICS } from '@/types/wastewater';
 import { useReadings } from '@/hooks/useReadings';
 import { useSite } from '@/hooks/useSite';
+import { useAuth } from '@/hooks/useAuth';
 import { useMissingReadingsReminder } from '@/hooks/useMissingReadingsReminder';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
-import { Sliders, Bell, Users, Building2, Check, RotateCcw, Loader2, Send, AlertCircle, CheckCircle2, FileText } from 'lucide-react';
+import { Sliders, Bell, Users, Building2, Check, RotateCcw, Loader2, Send, AlertCircle, CheckCircle2, FileText, ShieldAlert } from 'lucide-react';
 import { toast } from 'sonner';
 
 type SettingsTab = 'thresholds' | 'notifications' | 'team' | 'site';
@@ -17,6 +18,7 @@ export default function Settings() {
   const { site, loading: siteLoading } = useSite();
   const { thresholds, updateThreshold, loading: readingsLoading } = useReadings();
   const { sendReminder, sending: sendingReminder, lastResult: reminderResult } = useMissingReadingsReminder();
+  const { isAdmin } = useAuth();
   const [activeTab, setActiveTab] = useState<SettingsTab>('thresholds');
   const [localThresholds, setLocalThresholds] = useState<Partial<Record<MetricType, { min: number; max: number; enabled: boolean }>>>({
     svi: { min: 50, max: 150, enabled: true },
@@ -182,113 +184,162 @@ export default function Settings() {
           {activeTab === 'thresholds' && (
             <div>
               <div className="mb-6">
-                <h2 className="text-xl font-semibold text-foreground mb-1">
-                  Metric Thresholds
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  Set minimum and maximum values for each metric. Alerts will trigger when readings fall outside these ranges.
-                </p>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-xl font-semibold text-foreground mb-1">
+                      Metric Thresholds
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                      Set minimum and maximum values for each metric. Alerts will trigger when readings fall outside these ranges.
+                    </p>
+                  </div>
+                  {!isAdmin && (
+                    <div className="flex items-center gap-2 text-sm text-amber-600 bg-amber-50 dark:bg-amber-950/30 px-3 py-1.5 rounded-lg">
+                      <ShieldAlert className="w-4 h-4" />
+                      <span>Admin only</span>
+                    </div>
+                  )}
+                </div>
               </div>
               
-              <div className="space-y-4">
-                {Object.values(METRICS).map(metric => {
-                  const threshold = localThresholds[metric.id];
-                  const isModified = 
-                    threshold.min !== metric.defaultMin || 
-                    threshold.max !== metric.defaultMax;
+              {!isAdmin ? (
+                <div className="text-center py-12 border-2 border-dashed rounded-xl">
+                  <ShieldAlert className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                  <h3 className="font-semibold mb-2">Admin Access Required</h3>
+                  <p className="text-muted-foreground max-w-md mx-auto">
+                    Only administrators can modify threshold settings. Contact your admin to request changes.
+                  </p>
+                  
+                  {/* Read-only view of current thresholds */}
+                  <div className="mt-8 text-left max-w-2xl mx-auto">
+                    <h4 className="text-sm font-medium text-muted-foreground mb-4">Current Thresholds</h4>
+                    <div className="space-y-2">
+                      {Object.values(METRICS).map(metric => {
+                        const threshold = localThresholds[metric.id];
+                        return (
+                          <div 
+                            key={metric.id}
+                            className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className={cn(
+                                "w-2 h-2 rounded-full",
+                                threshold?.enabled ? "bg-green-500" : "bg-muted-foreground"
+                              )} />
+                              <span className="font-medium">{metric.name}</span>
+                            </div>
+                            <span className="text-sm text-muted-foreground font-mono">
+                              {threshold?.min} - {threshold?.max} {metric.unit}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-4">
+                    {Object.values(METRICS).map(metric => {
+                      const threshold = localThresholds[metric.id];
+                      const isModified = 
+                        threshold.min !== metric.defaultMin || 
+                        threshold.max !== metric.defaultMax;
 
-                  return (
-                    <div 
-                      key={metric.id}
-                      className={cn(
-                        "p-4 rounded-xl border transition-all duration-300",
-                        threshold.enabled 
-                          ? "bg-card border-border" 
-                          : "bg-muted/30 border-muted"
-                      )}
-                    >
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="flex items-center gap-3">
-                          <label className="relative inline-flex items-center cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={threshold.enabled}
-                              onChange={(e) => handleThresholdChange(metric.id, 'enabled', e.target.checked)}
-                              className="sr-only peer"
-                            />
-                            <div className="w-11 h-6 bg-muted peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
-                          </label>
-                          <div>
-                            <h3 className="font-semibold text-foreground">{metric.name}</h3>
-                            <p className="text-sm text-muted-foreground">
-                              Default: {metric.defaultMin} - {metric.defaultMax} {metric.unit}
-                            </p>
+                      return (
+                        <div 
+                          key={metric.id}
+                          className={cn(
+                            "p-4 rounded-xl border transition-all duration-300",
+                            threshold.enabled 
+                              ? "bg-card border-border" 
+                              : "bg-muted/30 border-muted"
+                          )}
+                        >
+                          <div className="flex items-start justify-between mb-4">
+                            <div className="flex items-center gap-3">
+                              <label className="relative inline-flex items-center cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={threshold.enabled}
+                                  onChange={(e) => handleThresholdChange(metric.id, 'enabled', e.target.checked)}
+                                  className="sr-only peer"
+                                />
+                                <div className="w-11 h-6 bg-muted peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                              </label>
+                              <div>
+                                <h3 className="font-semibold text-foreground">{metric.name}</h3>
+                                <p className="text-sm text-muted-foreground">
+                                  Default: {metric.defaultMin} - {metric.defaultMax} {metric.unit}
+                                </p>
+                              </div>
+                            </div>
+
+                            {isModified && (
+                              <button
+                                onClick={() => handleResetThreshold(metric.id)}
+                                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                              >
+                                <RotateCcw className="w-3 h-3" />
+                                Reset
+                              </button>
+                            )}
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-sm text-muted-foreground mb-1">
+                                Minimum {metric.unit && `(${metric.unit})`}
+                              </label>
+                              <input
+                                type="number"
+                                step={metric.precision > 0 ? Math.pow(10, -metric.precision) : 1}
+                                value={threshold.min}
+                                onChange={(e) => handleThresholdChange(metric.id, 'min', parseFloat(e.target.value) || 0)}
+                                disabled={!threshold.enabled}
+                                className="input-field font-mono disabled:opacity-50"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm text-muted-foreground mb-1">
+                                Maximum {metric.unit && `(${metric.unit})`}
+                              </label>
+                              <input
+                                type="number"
+                                step={metric.precision > 0 ? Math.pow(10, -metric.precision) : 1}
+                                value={threshold.max}
+                                onChange={(e) => handleThresholdChange(metric.id, 'max', parseFloat(e.target.value) || 0)}
+                                disabled={!threshold.enabled}
+                                className="input-field font-mono disabled:opacity-50"
+                              />
+                            </div>
                           </div>
                         </div>
+                      );
+                    })}
+                  </div>
 
-                        {isModified && (
-                          <button
-                            onClick={() => handleResetThreshold(metric.id)}
-                            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                          >
-                            <RotateCcw className="w-3 h-3" />
-                            Reset
-                          </button>
-                        )}
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm text-muted-foreground mb-1">
-                            Minimum {metric.unit && `(${metric.unit})`}
-                          </label>
-                          <input
-                            type="number"
-                            step={metric.precision > 0 ? Math.pow(10, -metric.precision) : 1}
-                            value={threshold.min}
-                            onChange={(e) => handleThresholdChange(metric.id, 'min', parseFloat(e.target.value) || 0)}
-                            disabled={!threshold.enabled}
-                            className="input-field font-mono disabled:opacity-50"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm text-muted-foreground mb-1">
-                            Maximum {metric.unit && `(${metric.unit})`}
-                          </label>
-                          <input
-                            type="number"
-                            step={metric.precision > 0 ? Math.pow(10, -metric.precision) : 1}
-                            value={threshold.max}
-                            onChange={(e) => handleThresholdChange(metric.id, 'max', parseFloat(e.target.value) || 0)}
-                            disabled={!threshold.enabled}
-                            className="input-field font-mono disabled:opacity-50"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="flex justify-end mt-6">
-                <button
-                  onClick={handleSaveThresholds}
-                  disabled={isSaving}
-                  className="flex items-center gap-2 btn-primary disabled:opacity-50"
-                >
-                  {isSaving ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <Check className="w-4 h-4" />
-                      Save Thresholds
-                    </>
-                  )}
-                </button>
-              </div>
+                  <div className="flex justify-end mt-6">
+                    <button
+                      onClick={handleSaveThresholds}
+                      disabled={isSaving}
+                      className="flex items-center gap-2 btn-primary disabled:opacity-50"
+                    >
+                      {isSaving ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Check className="w-4 h-4" />
+                          Save Thresholds
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           )}
 
