@@ -111,7 +111,7 @@ export default function Auth() {
             <div className="w-12 h-12 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 flex items-center justify-center">
               <Droplets className="w-7 h-7 text-white" />
             </div>
-            <span className="text-2xl font-bold text-white">WaterOps</span>
+            <span className="text-2xl font-bold text-white">Water Ops</span>
           </div>
         </header>
 
@@ -167,7 +167,7 @@ export default function Auth() {
         {/* Footer */}
         <footer className="p-6 text-center">
           <p className="text-sm text-white/50">
-            © {new Date().getFullYear()} WaterOps. Modern wastewater management.
+            © {new Date().getFullYear()} Water Ops. Modern wastewater management.
           </p>
         </footer>
       </div>
@@ -208,7 +208,7 @@ export default function Auth() {
                 <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
                   <Droplets className="w-6 h-6 text-primary" />
                 </div>
-                <span className="text-xl font-bold text-foreground">WaterOps</span>
+                <span className="text-xl font-bold text-foreground">Water Ops</span>
               </div>
 
               <h2 className="text-2xl font-bold text-foreground text-center mb-2">
