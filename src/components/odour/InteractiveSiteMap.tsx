@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { MapPin, AlertTriangle, Wind, History, Factory, Layers } from 'lucide-react';
+import { MapPin, AlertTriangle, Wind, History, Factory, Layers, PlusCircle, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { SiteMap, OdourIncident } from '@/types/odour';
 import DispersionPlume, { PlumeInfoPanel, PlumeLegend } from './DispersionPlume';
@@ -20,7 +20,7 @@ interface InteractiveSiteMapProps {
 }
 
 type PlumeMode = 'live' | 'history';
-type ClickMode = 'incident' | 'source';
+type ClickMode = 'incident' | 'source' | 'none';
 
 export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onIncidentClick }: InteractiveSiteMapProps) {
   const [hoveredIncident, setHoveredIncident] = useState<string | null>(null);
@@ -29,7 +29,7 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
   const [showPlumes, setShowPlumes] = useState(true);
   const [showPredictions, setShowPredictions] = useState(true);
   const [plumeMode, setPlumeMode] = useState<PlumeMode>('live');
-  const [clickMode, setClickMode] = useState<ClickMode>('incident');
+  const [clickMode, setClickMode] = useState<ClickMode>('none');
   const [containerWidth, setContainerWidth] = useState(800);
   const imageRef = useRef<HTMLDivElement>(null);
   
@@ -70,6 +70,7 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
 
   const handleClick = (e: React.MouseEvent) => {
     if (!imageRef.current) return;
+    if (clickMode === 'none') return;
     
     const rect = imageRef.current.getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * 100;
@@ -81,9 +82,10 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
         geometry: { type: 'point', x, y },
         base_intensity: 3,
       });
-      setClickMode('incident');
-    } else {
+      setClickMode('none');
+    } else if (clickMode === 'incident') {
       onMapClick({ x, y });
+      setClickMode('none');
     }
   };
 
@@ -173,12 +175,42 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
         </div>
         
         <div className="flex items-center gap-2">
+          {clickMode !== 'none' && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setClickMode('none')}
+              className="text-muted-foreground"
+            >
+              <X className="w-4 h-4 mr-1" />
+              Cancel
+            </Button>
+          )}
+          
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={clickMode === 'incident' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setClickMode(clickMode === 'incident' ? 'none' : 'incident')}
+                className={clickMode === 'incident' ? 'animate-pulse' : ''}
+              >
+                <PlusCircle className="w-4 h-4 mr-1" />
+                {clickMode === 'incident' ? 'Click map to place' : 'Record Incident'}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Click to enter incident recording mode, then click on the map</p>
+            </TooltipContent>
+          </Tooltip>
+          
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant={clickMode === 'source' ? 'default' : 'outline'}
                 size="sm"
-                onClick={() => setClickMode(clickMode === 'source' ? 'incident' : 'source')}
+                onClick={() => setClickMode(clickMode === 'source' ? 'none' : 'source')}
+                className={clickMode === 'source' ? 'animate-pulse' : ''}
               >
                 <Factory className="w-4 h-4 mr-1" />
                 {clickMode === 'source' ? 'Click map to place' : 'Add Source'}
@@ -209,11 +241,32 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
       <div
         ref={imageRef}
         className={cn(
-          "relative rounded-xl overflow-hidden border border-border",
-          clickMode === 'source' ? 'cursor-crosshair' : 'cursor-crosshair'
+          "relative rounded-xl overflow-hidden border-2 transition-all duration-200",
+          clickMode !== 'none' 
+            ? 'cursor-crosshair border-primary shadow-lg shadow-primary/20' 
+            : 'cursor-default border-border'
         )}
         onClick={handleClick}
       >
+        {/* Placement mode overlay */}
+        {clickMode !== 'none' && (
+          <div className="absolute inset-0 bg-primary/5 pointer-events-none z-[30]">
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground px-4 py-2 rounded-full text-sm font-medium shadow-lg flex items-center gap-2 animate-pulse">
+              {clickMode === 'incident' ? (
+                <>
+                  <MapPin className="w-4 h-4" />
+                  Click on the map to place incident
+                </>
+              ) : (
+                <>
+                  <Factory className="w-4 h-4" />
+                  Click on the map to place source
+                </>
+              )}
+            </div>
+          </div>
+        )}
+        
         <img
           src={siteMap.image_url}
           alt={siteMap.name}
