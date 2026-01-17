@@ -3,6 +3,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { EmailRecipients } from '@/components/settings/EmailRecipients';
 import { SiteSettings } from '@/components/settings/SiteSettings';
 import { UserManagement } from '@/components/settings/UserManagement';
+import { SiteMemberManagement } from '@/components/settings/SiteMemberManagement';
 import { Threshold, MetricType, METRICS } from '@/types/wastewater';
 import { useReadings } from '@/hooks/useReadings';
 import { useSite } from '@/hooks/useSite';
@@ -10,10 +11,10 @@ import { useAuth } from '@/hooks/useAuth';
 import { useMissingReadingsReminder } from '@/hooks/useMissingReadingsReminder';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
-import { Sliders, Bell, Users, Building2, Check, RotateCcw, Loader2, Send, AlertCircle, CheckCircle2, FileText, ShieldAlert, UserCog } from 'lucide-react';
+import { Sliders, Bell, Users, Building2, Check, RotateCcw, Loader2, Send, AlertCircle, CheckCircle2, FileText, ShieldAlert, UserCog, UsersRound } from 'lucide-react';
 import { toast } from 'sonner';
 
-type SettingsTab = 'thresholds' | 'notifications' | 'team' | 'users' | 'site';
+type SettingsTab = 'thresholds' | 'notifications' | 'team' | 'site-members' | 'users' | 'site';
 
 export default function Settings() {
   const { site, loading: siteLoading } = useSite();
@@ -85,6 +86,7 @@ export default function Settings() {
     { key: 'thresholds' as const, label: 'Thresholds', icon: Sliders },
     { key: 'notifications' as const, label: 'Notifications', icon: Bell },
     { key: 'team' as const, label: 'Team', icon: Users },
+    { key: 'site-members' as const, label: 'Site Members', icon: UsersRound },
     { key: 'users' as const, label: 'User Roles', icon: UserCog, adminOnly: true },
     { key: 'site' as const, label: 'Site', icon: Building2 },
   ];
@@ -592,6 +594,10 @@ export default function Settings() {
                 )}
               </div>
             </div>
+          )}
+
+          {activeTab === 'site-members' && (
+            <SiteMemberManagement />
           )}
 
           {activeTab === 'users' && (
