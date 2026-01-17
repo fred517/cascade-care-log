@@ -22,7 +22,7 @@ interface WeeklySummaryProps {
   onDayClick?: (date: Date) => void;
 }
 
-const metricOrder: MetricType[] = ['svi', 'ph', 'do', 'orp', 'mlss', 'ammonia'];
+const metricOrder: MetricType[] = ['svi', 'ph', 'do', 'orp', 'mlss', 'ammonia_tan'];
 
 export function WeeklySummary({ readings, weekStart, onDayClick }: WeeklySummaryProps) {
   const currentWeekStart = weekStart || startOfWeek(new Date(), { weekStartsOn: 1 });

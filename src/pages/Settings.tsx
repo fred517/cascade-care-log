@@ -17,13 +17,13 @@ export default function Settings() {
   const { thresholds, updateThreshold, loading: readingsLoading } = useReadings();
   const { sendReminder, sending: sendingReminder, lastResult: reminderResult } = useMissingReadingsReminder();
   const [activeTab, setActiveTab] = useState<SettingsTab>('thresholds');
-  const [localThresholds, setLocalThresholds] = useState<Record<MetricType, { min: number; max: number; enabled: boolean }>>({
+  const [localThresholds, setLocalThresholds] = useState<Partial<Record<MetricType, { min: number; max: number; enabled: boolean }>>>({
     svi: { min: 50, max: 150, enabled: true },
     ph: { min: 6.5, max: 8.5, enabled: true },
     do: { min: 2.0, max: 6.0, enabled: true },
     orp: { min: -50, max: 200, enabled: true },
     mlss: { min: 2000, max: 4000, enabled: true },
-    ammonia: { min: 0, max: 5, enabled: true },
+    ammonia_tan: { min: 0, max: 5, enabled: true },
   });
   const [isSaving, setIsSaving] = useState(false);
   const [teamMembers, setTeamMembers] = useState<any[]>([]);

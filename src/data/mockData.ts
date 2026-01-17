@@ -5,13 +5,13 @@ const generateMockReadings = (): Reading[] => {
   const readings: Reading[] = [];
   const now = new Date();
   
-  const metricRanges: Record<MetricType, { base: number; variance: number }> = {
+  const metricRanges: Partial<Record<MetricType, { base: number; variance: number }>> = {
     svi: { base: 100, variance: 40 },
     ph: { base: 7.2, variance: 0.8 },
     do: { base: 3.5, variance: 1.5 },
     orp: { base: 75, variance: 80 },
     mlss: { base: 3000, variance: 800 },
-    ammonia: { base: 2.5, variance: 2 },
+    ammonia_tan: { base: 2.5, variance: 2 },
   };
 
   for (let day = 0; day < 30; day++) {

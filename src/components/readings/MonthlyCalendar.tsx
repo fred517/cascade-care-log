@@ -37,7 +37,7 @@ interface MonthlyCalendarProps {
 
 type DayStatus = 'complete' | 'partial' | 'missing' | 'future' | 'today-pending';
 
-const metricOrder: MetricType[] = ['svi', 'ph', 'do', 'orp', 'mlss', 'ammonia'];
+const metricOrder: MetricType[] = ['svi', 'ph', 'do', 'orp', 'mlss', 'ammonia_tan'];
 
 export function MonthlyCalendar({ readings, onDayClick }: MonthlyCalendarProps) {
   const [currentMonth, setCurrentMonth] = useState(new Date());

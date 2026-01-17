@@ -1,4 +1,4 @@
-import { METRICS, DailyStatus, MetricType } from '@/types/wastewater';
+import { PARAMETERS, PARAMETER_ICONS, DailyStatus, ParameterKey, getSeverity } from '@/types/wastewater';
 import { TrendingUp, TrendingDown, Minus, AlertTriangle, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -7,17 +7,8 @@ interface MetricCardProps {
   onClick?: () => void;
 }
 
-const metricIcons: Record<MetricType, string> = {
-  svi: '🧪',
-  ph: '⚗️',
-  do: '💨',
-  orp: '⚡',
-  mlss: '🔬',
-  ammonia: '🧫',
-};
-
 export function MetricCard({ status, onClick }: MetricCardProps) {
-  const metric = METRICS[status.metricId];
+  const param = PARAMETERS[status.metricId];
   
   const statusColors = {
     normal: 'border-status-normal/30 bg-status-normal/5',
@@ -38,7 +29,7 @@ export function MetricCard({ status, onClick }: MetricCardProps) {
 
   const formatValue = (value: number | null) => {
     if (value === null) return '--';
-    return value.toFixed(metric.precision);
+    return value.toFixed(param.decimals);
   };
 
   const formatTime = (date: Date | null) => {
@@ -52,6 +43,9 @@ export function MetricCard({ status, onClick }: MetricCardProps) {
     return `${diffDays}d ago`;
   };
 
+  // Get severity for the current value
+  const valueSeverity = status.latestValue !== null ? getSeverity(status.latestValue, param) : null;
+
   return (
     <button
       onClick={onClick}
@@ -63,10 +57,10 @@ export function MetricCard({ status, onClick }: MetricCardProps) {
       {/* Header */}
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-2">
-          <span className="text-2xl">{metricIcons[status.metricId]}</span>
+          <span className="text-2xl">{PARAMETER_ICONS[status.metricId]}</span>
           <div>
-            <h3 className="font-semibold text-foreground">{metric.name}</h3>
-            <p className="text-xs text-muted-foreground">{metric.description}</p>
+            <h3 className="font-semibold text-foreground">{param.label}</h3>
+            <p className="text-xs text-muted-foreground">{param.category}</p>
           </div>
         </div>
         <div className={cn("status-indicator", statusIndicatorClass[status.status])} />
@@ -77,7 +71,7 @@ export function MetricCard({ status, onClick }: MetricCardProps) {
         <span className="text-3xl font-bold font-mono text-foreground">
           {formatValue(status.latestValue)}
         </span>
-        <span className="text-sm text-muted-foreground">{metric.unit}</span>
+        <span className="text-sm text-muted-foreground">{param.unit}</span>
       </div>
 
       {/* Footer */}
