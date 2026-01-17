@@ -11,40 +11,31 @@ export interface SiteMap {
   created_by: string;
 }
 
+export interface FacilitySitemap {
+  id: string;
+  facility_id: string;
+  storage_path: string;
+  file_mime: string | null;
+  file_name: string | null;
+  file_size: number | null;
+  uploaded_by: string | null;
+  created_at: string;
+}
+
 export interface OdourIncident {
   id: string;
-  site_id: string;
-  site_map_id: string | null;
-  click_x: number;
-  click_y: number;
-  latitude: number | null;
-  longitude: number | null;
-  incident_at: string;
-  frequency: number | null;
+  facility_id: string;
+  occurred_at: string;
+  lat: number;
+  lng: number;
   intensity: number | null;
-  duration: number | null;
-  offensiveness: number | null;
-  location_impact: string | null;
-  odour_type: OdourType | null;
+  description: string | null;
   wind_speed: number | null;
-  wind_direction: number | null;
-  wind_direction_text: string | null;
+  wind_dir: number | null;
   temperature: number | null;
   humidity: number | null;
-  pressure: number | null;
-  weather_description: string | null;
-  weather_fetched_at: string | null;
-  notes: string | null;
-  source_suspected: string | null;
-  corrective_actions: string | null;
-  follow_up_date: string | null;
-  follow_up_notes: string | null;
-  status: OdourIncidentStatus;
-  resolved_at: string | null;
-  resolved_by: string | null;
+  created_by: string | null;
   created_at: string;
-  updated_at: string;
-  created_by: string;
 }
 
 export type OdourType = 

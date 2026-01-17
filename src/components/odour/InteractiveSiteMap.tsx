@@ -1,17 +1,15 @@
 import { useState, useRef, useEffect } from 'react';
-import { MapPin, AlertTriangle, Wind, History, Factory, Layers, PlusCircle, X } from 'lucide-react';
+import { MapPin, AlertTriangle, Wind, Factory, PlusCircle, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { SiteMap, OdourIncident } from '@/types/odour';
 import DispersionPlume, { PlumeInfoPanel, PlumeLegend } from './DispersionPlume';
-import PlumePlayback, { usePlumePlayback } from './PlumePlayback';
-import { useLatestWeatherSnapshot, useWeatherSnapshots } from '@/hooks/useWeatherSnapshots';
+import { useLatestWeatherSnapshot } from '@/hooks/useWeatherSnapshots';
 import { useOdourSources, useCreateOdourSource, type OdourSource } from '@/hooks/useOdourSources';
-import { useCurrentPredictions, type OdourPrediction } from '@/hooks/useOdourPredictions';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+
 interface InteractiveSiteMapProps {
   siteMap: SiteMap;
   incidents: OdourIncident[];
@@ -19,35 +17,19 @@ interface InteractiveSiteMapProps {
   onIncidentClick?: (incident: OdourIncident) => void;
 }
 
-type PlumeMode = 'live' | 'history';
 type ClickMode = 'incident' | 'source' | 'none';
 
 export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onIncidentClick }: InteractiveSiteMapProps) {
   const [hoveredIncident, setHoveredIncident] = useState<string | null>(null);
   const [hoveredSource, setHoveredSource] = useState<string | null>(null);
-  const [hoveredPrediction, setHoveredPrediction] = useState<string | null>(null);
   const [showPlumes, setShowPlumes] = useState(true);
-  const [showPredictions, setShowPredictions] = useState(true);
-  const [plumeMode, setPlumeMode] = useState<PlumeMode>('live');
   const [clickMode, setClickMode] = useState<ClickMode>('none');
   const [containerWidth, setContainerWidth] = useState(800);
   const imageRef = useRef<HTMLDivElement>(null);
   
   const { data: latestSnapshot, isLoading: latestLoading } = useLatestWeatherSnapshot();
-  const { data: historicalSnapshots = [], isLoading: historyLoading } = useWeatherSnapshots(48);
   const { data: odourSources = [] } = useOdourSources();
-  const { data: predictions = [] } = useCurrentPredictions();
   const createSource = useCreateOdourSource();
-  
-  const {
-    currentIndex,
-    setCurrentIndex,
-    isPlaying,
-    setIsPlaying,
-    currentSnapshot: playbackSnapshot,
-  } = usePlumePlayback(historicalSnapshots);
-
-  const activeSnapshot = plumeMode === 'live' ? latestSnapshot : playbackSnapshot;
 
   useEffect(() => {
     if (!imageRef.current) return;
@@ -61,12 +43,6 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
     observer.observe(imageRef.current);
     return () => observer.disconnect();
   }, []);
-
-  useEffect(() => {
-    if (plumeMode === 'live') {
-      setIsPlaying(false);
-    }
-  }, [plumeMode, setIsPlaying]);
 
   // Escape key to cancel placement mode
   useEffect(() => {
@@ -102,9 +78,6 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
   };
 
   const getIncidentColor = (incident: OdourIncident) => {
-    if (incident.status === 'resolved' || incident.status === 'closed') {
-      return 'bg-green-500';
-    }
     if (incident.intensity && incident.intensity >= 4) {
       return 'bg-red-500';
     }
@@ -114,24 +87,27 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
     return 'bg-orange-500';
   };
 
-  const visibleIncidents = incidents.filter(incident => {
-    if (incident.site_map_id !== siteMap.id) return false;
-    return incident.status === 'open' || incident.status === 'investigating';
-  });
+  // Convert lat/lng to approximate x/y percentages for display
+  // This is a simplified approach - in production you'd use proper geo transformation
+  const getIncidentPosition = (incident: OdourIncident) => {
+    // For now, use a simple hash-based position since we don't have proper geo bounds
+    const hash = incident.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    return {
+      x: 10 + (hash % 80),
+      y: 10 + ((hash * 7) % 80),
+    };
+  };
 
-  const hasWeatherData = activeSnapshot && 
-    activeSnapshot.wind_speed_mps !== null && 
-    activeSnapshot.wind_direction_deg !== null &&
-    activeSnapshot.stability_class;
-
-  const hasHistoricalData = historicalSnapshots.length > 1;
+  const hasWeatherData = latestSnapshot && 
+    latestSnapshot.wind_speed_mps !== null && 
+    latestSnapshot.wind_direction_deg !== null &&
+    latestSnapshot.stability_class;
 
   // Get source position for rendering
   const getSourcePosition = (source: OdourSource): { x: number; y: number } | null => {
     if (source.geometry.type === 'point' && source.geometry.x !== undefined && source.geometry.y !== undefined) {
       return { x: source.geometry.x, y: source.geometry.y };
     }
-    // For polygons, use centroid
     if (source.geometry.type === 'polygon' && source.geometry.coordinates?.length) {
       const coords = source.geometry.coordinates;
       const x = coords.reduce((sum, c) => sum + c.x, 0) / coords.length;
@@ -157,33 +133,6 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
               Dispersion Plumes
             </Label>
           </div>
-          
-          <div className="flex items-center gap-2">
-            <Switch
-              id="show-predictions"
-              checked={showPredictions}
-              onCheckedChange={setShowPredictions}
-            />
-            <Label htmlFor="show-predictions" className="text-sm flex items-center gap-1.5 cursor-pointer">
-              <Layers className="w-4 h-4" />
-              Predicted Plumes
-            </Label>
-          </div>
-          
-          {showPlumes && hasHistoricalData && (
-            <Tabs value={plumeMode} onValueChange={(v) => setPlumeMode(v as PlumeMode)}>
-              <TabsList className="h-8">
-                <TabsTrigger value="live" className="text-xs h-6 px-2">
-                  <Wind className="w-3 h-3 mr-1" />
-                  Live
-                </TabsTrigger>
-                <TabsTrigger value="history" className="text-xs h-6 px-2">
-                  <History className="w-3 h-3 mr-1" />
-                  History
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
-          )}
         </div>
         
         <div className="flex items-center gap-2">
@@ -233,22 +182,11 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
             </TooltipContent>
           </Tooltip>
           
-          {(latestLoading || historyLoading) && (
+          {latestLoading && (
             <span className="text-xs text-muted-foreground">Loading...</span>
           )}
         </div>
       </div>
-
-      {/* Playback controls */}
-      {showPlumes && plumeMode === 'history' && (
-        <PlumePlayback
-          snapshots={historicalSnapshots}
-          currentIndex={currentIndex}
-          onIndexChange={setCurrentIndex}
-          isPlaying={isPlaying}
-          onPlayingChange={setIsPlaying}
-        />
-      )}
 
       <div
         ref={imageRef}
@@ -286,159 +224,6 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
           draggable={false}
         />
         
-        {/* Predicted plume polygons with intensity contours */}
-        {showPredictions && predictions.length > 0 && (
-          <svg 
-            className="absolute inset-0 w-full h-full pointer-events-none z-[1]"
-            viewBox="0 0 100 100"
-            preserveAspectRatio="none"
-          >
-            <defs>
-              {/* Gradient definitions for contour colors */}
-              <linearGradient id="contour-high" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="hsl(var(--destructive))" stopOpacity="0.7" />
-                <stop offset="100%" stopColor="hsl(var(--destructive))" stopOpacity="0.5" />
-              </linearGradient>
-              <linearGradient id="contour-medium" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="hsl(var(--chart-2))" stopOpacity="0.5" />
-                <stop offset="100%" stopColor="hsl(var(--chart-2))" stopOpacity="0.3" />
-              </linearGradient>
-              <linearGradient id="contour-low" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="hsl(var(--chart-3))" stopOpacity="0.3" />
-                <stop offset="100%" stopColor="hsl(var(--chart-3))" stopOpacity="0.15" />
-              </linearGradient>
-            </defs>
-            
-            {predictions.map((prediction) => {
-              if (!prediction.geometry?.coordinates?.length) return null;
-              
-              const contours = prediction.geometry.contours || [];
-              const outerPoints = prediction.geometry.coordinates
-                .map(c => `${c.x},${c.y}`)
-                .join(' ');
-              
-              // Contour colors and opacities
-              const contourStyles: Record<string, { fill: string; opacity: number; stroke: string }> = {
-                high: { fill: 'hsl(var(--destructive))', opacity: 0.55, stroke: 'hsl(var(--destructive))' },
-                medium: { fill: 'hsl(var(--chart-2))', opacity: 0.4, stroke: 'hsl(var(--chart-2))' },
-                low: { fill: 'hsl(var(--chart-3))', opacity: 0.25, stroke: 'hsl(var(--chart-3))' },
-              };
-              
-              return (
-                <g key={`pred-group-${prediction.id}`}>
-                  {/* Outer boundary (lowest intensity) */}
-                  <polygon
-                    points={outerPoints}
-                    fill="hsl(var(--chart-3))"
-                    fillOpacity={0.15}
-                    stroke="hsl(var(--chart-3))"
-                    strokeWidth="0.2"
-                    strokeOpacity={0.4}
-                    strokeDasharray="1,1"
-                  />
-                  
-                  {/* Intensity contours (render from outer to inner) */}
-                  {[...contours].reverse().map((contour, idx) => {
-                    const contourPoints = contour.coordinates
-                      .map(c => `${c.x},${c.y}`)
-                      .join(' ');
-                    const style = contourStyles[contour.level] || contourStyles.low;
-                    
-                    return (
-                      <polygon
-                        key={`contour-${prediction.id}-${contour.level}-${idx}`}
-                        points={contourPoints}
-                        fill={style.fill}
-                        fillOpacity={style.opacity}
-                        stroke={style.stroke}
-                        strokeWidth="0.25"
-                        strokeOpacity={0.6}
-                      />
-                    );
-                  })}
-                  
-                  {/* Interactive overlay for hover */}
-                  <polygon
-                    points={outerPoints}
-                    fill="transparent"
-                    className="pointer-events-auto cursor-pointer"
-                    onMouseEnter={() => setHoveredPrediction(prediction.id)}
-                    onMouseLeave={() => setHoveredPrediction(null)}
-                  />
-                </g>
-              );
-            })}
-          </svg>
-        )}
-        
-        {/* Prediction hover info */}
-        {hoveredPrediction && predictions.find(p => p.id === hoveredPrediction) && (() => {
-          const pred = predictions.find(p => p.id === hoveredPrediction)!;
-          const centroid = pred.geometry.coordinates?.length
-            ? {
-                x: pred.geometry.coordinates.reduce((s, c) => s + c.x, 0) / pred.geometry.coordinates.length,
-                y: pred.geometry.coordinates.reduce((s, c) => s + c.y, 0) / pred.geometry.coordinates.length,
-              }
-            : { x: 50, y: 50 };
-          
-          // Calculate time remaining
-          const now = new Date();
-          const validTo = pred.valid_to ? new Date(pred.valid_to) : null;
-          const minutesRemaining = validTo ? Math.max(0, Math.round((validTo.getTime() - now.getTime()) / 60000)) : null;
-          
-          return (
-            <div
-              className="absolute z-20 bg-popover text-popover-foreground rounded-lg p-3 shadow-lg text-xs pointer-events-none min-w-[180px]"
-              style={{
-                left: `${centroid.x}%`,
-                top: `${centroid.y}%`,
-                transform: 'translate(-50%, -100%)',
-              }}
-            >
-              <p className="font-semibold text-sm mb-1.5">Predicted Plume</p>
-              
-              <div className="space-y-1">
-                <div className="flex justify-between gap-3">
-                  <span className="text-muted-foreground">Peak Intensity:</span>
-                  <span className="font-medium">{pred.peak_intensity?.toFixed(1) || 'N/A'}</span>
-                </div>
-                
-                {pred.valid_from && (
-                  <div className="flex justify-between gap-3">
-                    <span className="text-muted-foreground">Valid From:</span>
-                    <span className="font-medium">{new Date(pred.valid_from).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                  </div>
-                )}
-                
-                {pred.valid_to && (
-                  <div className="flex justify-between gap-3">
-                    <span className="text-muted-foreground">Valid Until:</span>
-                    <span className="font-medium">{new Date(pred.valid_to).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                  </div>
-                )}
-                
-                {minutesRemaining !== null && (
-                  <div className="flex justify-between gap-3">
-                    <span className="text-muted-foreground">Expires in:</span>
-                    <span className={cn("font-medium", minutesRemaining < 15 ? "text-destructive" : "text-green-600")}>
-                      {minutesRemaining > 0 ? `${minutesRemaining} min` : 'Expired'}
-                    </span>
-                  </div>
-                )}
-                
-                {pred.model_version && (
-                  <div className="pt-1 mt-1 border-t border-border">
-                    <div className="flex justify-between gap-3">
-                      <span className="text-muted-foreground">Model:</span>
-                      <span className="font-mono text-[10px]">{pred.model_version}</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })()}
-        
         {/* Dispersion plumes from defined odour sources */}
         {showPlumes && hasWeatherData && odourSources.map((source) => {
           const pos = getSourcePosition(source);
@@ -446,12 +231,12 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
           
           return (
             <DispersionPlume
-              key={`plume-source-${source.id}-${activeSnapshot.id}`}
+              key={`plume-source-${source.id}-${latestSnapshot.id}`}
               sourceX={pos.x}
               sourceY={pos.y}
-              windDirection={activeSnapshot.wind_direction_deg!}
-              windSpeed={activeSnapshot.wind_speed_mps!}
-              stabilityClass={activeSnapshot.stability_class!}
+              windDirection={latestSnapshot.wind_direction_deg!}
+              windSpeed={latestSnapshot.wind_speed_mps!}
+              stabilityClass={latestSnapshot.stability_class!}
               intensity={source.base_intensity || 3}
               containerWidth={containerWidth}
             />
@@ -496,72 +281,59 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
         })}
         
         {/* Incident markers */}
-        {visibleIncidents.map((incident) => (
-          <div
-            key={incident.id}
-            className="absolute transform -translate-x-1/2 -translate-y-1/2 cursor-pointer z-10"
-            style={{
-              left: `${incident.click_x}%`,
-              top: `${incident.click_y}%`,
-            }}
-            onMouseEnter={() => setHoveredIncident(incident.id)}
-            onMouseLeave={() => setHoveredIncident(null)}
-            onClick={(e) => {
-              e.stopPropagation();
-              onIncidentClick?.(incident);
-            }}
-          >
+        {incidents.map((incident) => {
+          const pos = getIncidentPosition(incident);
+          return (
             <div
-              className={cn(
-                'w-6 h-6 rounded-full flex items-center justify-center shadow-lg transition-transform',
-                getIncidentColor(incident),
-                hoveredIncident === incident.id && 'scale-125'
-              )}
+              key={incident.id}
+              className="absolute transform -translate-x-1/2 -translate-y-1/2 cursor-pointer z-10"
+              style={{
+                left: `${pos.x}%`,
+                top: `${pos.y}%`,
+              }}
+              onMouseEnter={() => setHoveredIncident(incident.id)}
+              onMouseLeave={() => setHoveredIncident(null)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onIncidentClick?.(incident);
+              }}
             >
-              <AlertTriangle className="w-3.5 h-3.5 text-white" />
-            </div>
-            
-            {hoveredIncident === incident.id && (
-              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-48 bg-popover text-popover-foreground rounded-lg p-2 shadow-lg text-xs z-20">
-                <p className="font-semibold">{incident.odour_type?.replace('_', ' ')}</p>
-                <p className="text-muted-foreground">
-                  {new Date(incident.incident_at).toLocaleDateString()}
-                </p>
-                {incident.intensity && (
-                  <p>Intensity: {incident.intensity}/5</p>
+              <div
+                className={cn(
+                  'w-6 h-6 rounded-full flex items-center justify-center shadow-lg transition-transform',
+                  getIncidentColor(incident),
+                  hoveredIncident === incident.id && 'scale-125'
                 )}
-                <p className="capitalize">Status: {incident.status}</p>
+              >
+                <AlertTriangle className="w-3.5 h-3.5 text-white" />
               </div>
-            )}
-          </div>
-        ))}
+              
+              {hoveredIncident === incident.id && (
+                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-48 bg-popover text-popover-foreground rounded-lg p-2 shadow-lg text-xs z-20">
+                  <p className="font-semibold">
+                    {new Date(incident.occurred_at).toLocaleDateString()}
+                  </p>
+                  {incident.intensity && (
+                    <p>Intensity: {incident.intensity}/5</p>
+                  )}
+                  {incident.description && (
+                    <p className="text-muted-foreground line-clamp-2">{incident.description}</p>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
         
         {/* Weather info panel */}
-        {showPlumes && plumeMode === 'live' && hasWeatherData && (
+        {showPlumes && hasWeatherData && (
           <PlumeInfoPanel
-            windSpeed={activeSnapshot.wind_speed_mps!}
-            windDirection={activeSnapshot.wind_direction_deg!}
-            stabilityClass={activeSnapshot.stability_class!}
-            temperature={activeSnapshot.temperature_c}
+            windSpeed={latestSnapshot.wind_speed_mps!}
+            windDirection={latestSnapshot.wind_direction_deg!}
+            stabilityClass={latestSnapshot.stability_class!}
+            temperature={latestSnapshot.temperature_c}
           />
         )}
-        
-        {/* Click instruction overlay */}
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-0 hover:opacity-100 transition-opacity bg-black/10">
-          <div className="bg-background/90 px-3 py-2 rounded-lg shadow-lg flex items-center gap-2">
-            {clickMode === 'source' ? (
-              <>
-                <Factory className="w-4 h-4 text-primary" />
-                <span className="text-sm font-medium">Click to add odour source</span>
-              </>
-            ) : (
-              <>
-                <MapPin className="w-4 h-4 text-primary" />
-                <span className="text-sm font-medium">Click to report odour</span>
-              </>
-            )}
-          </div>
-        </div>
       </div>
 
       {/* Legend */}
@@ -572,28 +344,9 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
           </div>
           <span>Odour source</span>
         </div>
-        
-        {/* Prediction contour legend */}
-        {showPredictions && predictions.length > 0 && (
-          <>
-            <div className="flex items-center gap-1.5">
-              <div className="w-4 h-3 rounded bg-destructive/55 border border-destructive/60" />
-              <span>High (&gt;80%)</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-4 h-3 rounded bg-chart-2/40 border border-chart-2/60" />
-              <span>Medium (50-80%)</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-4 h-3 rounded bg-chart-3/25 border border-chart-3/40" />
-              <span>Low (20-50%)</span>
-            </div>
-          </>
-        )}
-        
         <div className="flex items-center gap-1.5">
           <div className="w-3 h-3 rounded-full bg-red-500" />
-          <span>High intensity incident</span>
+          <span>High intensity</span>
         </div>
         <div className="flex items-center gap-1.5">
           <div className="w-3 h-3 rounded-full bg-yellow-500" />
