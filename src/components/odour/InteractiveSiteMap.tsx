@@ -37,14 +37,11 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
     return 'bg-orange-500';
   };
 
-  // Filter to show only recent incidents (last 7 days) or open ones
+  // Filter to show only open/investigating incidents - resolved/closed are hidden from map
   const visibleIncidents = incidents.filter(incident => {
     if (incident.site_map_id !== siteMap.id) return false;
-    if (incident.status === 'open' || incident.status === 'investigating') return true;
-    const incidentDate = new Date(incident.incident_at);
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    return incidentDate >= sevenDaysAgo;
+    // Only show open or investigating incidents on the map
+    return incident.status === 'open' || incident.status === 'investigating';
   });
 
   return (
