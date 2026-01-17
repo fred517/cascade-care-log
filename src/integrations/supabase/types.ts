@@ -325,6 +325,57 @@ export type Database = {
           },
         ]
       }
+      odour_predictions: {
+        Row: {
+          created_at: string | null
+          geometry: Json
+          id: string
+          model_version: string | null
+          peak_intensity: number | null
+          site_id: string
+          source_id: string
+          valid_from: string | null
+          valid_to: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          geometry: Json
+          id?: string
+          model_version?: string | null
+          peak_intensity?: number | null
+          site_id: string
+          source_id: string
+          valid_from?: string | null
+          valid_to?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          geometry?: Json
+          id?: string
+          model_version?: string | null
+          peak_intensity?: number | null
+          site_id?: string
+          source_id?: string
+          valid_from?: string | null
+          valid_to?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "odour_predictions_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "odour_predictions_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "odour_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       odour_sources: {
         Row: {
           base_intensity: number | null
