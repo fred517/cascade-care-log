@@ -14,7 +14,8 @@ import {
   LogOut,
   User,
   Shield,
-  FileText
+  FileText,
+  Wind
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
@@ -28,6 +29,7 @@ const navItems = [
   { path: '/readings', label: 'Add Reading', icon: PlusCircle },
   { path: '/trends', label: 'Trends', icon: TrendingUp },
   { path: '/reports', label: 'Reports', icon: FileText },
+  { path: '/odour-map', label: 'Odour Map', icon: Wind },
   { path: '/alerts', label: 'Alerts', icon: Bell },
   { path: '/guides', label: 'How-To Guides', icon: BookOpen },
   { path: '/settings', label: 'Settings', icon: Settings, requiredRole: 'supervisor' as const },
