@@ -6,6 +6,7 @@ import { UserManagement } from '@/components/settings/UserManagement';
 import { SiteMemberManagement } from '@/components/settings/SiteMemberManagement';
 import CalibrationManager from '@/components/settings/CalibrationManager';
 import UserApproval from '@/components/settings/UserApproval';
+import { MetricConfiguration } from '@/components/settings/MetricConfiguration';
 import { Threshold, MetricType, METRICS } from '@/types/wastewater';
 import { useReadings } from '@/hooks/useReadings';
 import { useSite } from '@/hooks/useSite';
@@ -13,17 +14,17 @@ import { useAuth } from '@/hooks/useAuth';
 import { useMissingReadingsReminder } from '@/hooks/useMissingReadingsReminder';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
-import { Sliders, Bell, Users, Building2, Check, RotateCcw, Loader2, Send, AlertCircle, CheckCircle2, FileText, ShieldAlert, UserCog, UsersRound, Wrench, UserCheck } from 'lucide-react';
+import { Sliders, Bell, Users, Building2, Check, RotateCcw, Loader2, Send, AlertCircle, CheckCircle2, FileText, ShieldAlert, UserCog, UsersRound, Wrench, UserCheck, LayoutGrid } from 'lucide-react';
 import { toast } from 'sonner';
 
-type SettingsTab = 'thresholds' | 'calibrations' | 'notifications' | 'team' | 'site-members' | 'users' | 'approvals' | 'site';
+type SettingsTab = 'metrics' | 'thresholds' | 'calibrations' | 'notifications' | 'team' | 'site-members' | 'users' | 'approvals' | 'site';
 
 export default function Settings() {
   const { site, loading: siteLoading } = useSite();
   const { thresholds, updateThreshold, loading: readingsLoading } = useReadings();
   const { sendReminder, sending: sendingReminder, lastResult: reminderResult } = useMissingReadingsReminder();
   const { isAdmin } = useAuth();
-  const [activeTab, setActiveTab] = useState<SettingsTab>('thresholds');
+  const [activeTab, setActiveTab] = useState<SettingsTab>('metrics');
   const [localThresholds, setLocalThresholds] = useState<Partial<Record<MetricType, { min: number; max: number; enabled: boolean }>>>({
     svi: { min: 50, max: 150, enabled: true },
     ph: { min: 6.5, max: 8.5, enabled: true },
@@ -85,6 +86,7 @@ export default function Settings() {
   }, [fetchTeam]);
 
   const tabs = [
+    { key: 'metrics' as const, label: 'Metrics', icon: LayoutGrid, adminOnly: true },
     { key: 'thresholds' as const, label: 'Thresholds', icon: Sliders },
     { key: 'calibrations' as const, label: 'Calibrations', icon: Wrench },
     { key: 'notifications' as const, label: 'Notifications', icon: Bell },
@@ -196,6 +198,10 @@ export default function Settings() {
 
         {/* Content */}
         <div className="bg-card rounded-xl border border-border p-6">
+          {activeTab === 'metrics' && (
+            <MetricConfiguration />
+          )}
+
           {activeTab === 'thresholds' && (
             <div>
               <div className="mb-6">
