@@ -325,6 +325,41 @@ export type Database = {
           },
         ]
       }
+      odour_sources: {
+        Row: {
+          base_intensity: number | null
+          created_at: string | null
+          geometry: Json
+          id: string
+          name: string | null
+          site_id: string
+        }
+        Insert: {
+          base_intensity?: number | null
+          created_at?: string | null
+          geometry: Json
+          id?: string
+          name?: string | null
+          site_id: string
+        }
+        Update: {
+          base_intensity?: number | null
+          created_at?: string | null
+          geometry?: Json
+          id?: string
+          name?: string | null
+          site_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "odour_sources_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       org_members: {
         Row: {
           created_at: string
