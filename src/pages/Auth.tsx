@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Navigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { Droplets, Mail, Lock, User, Loader2, ArrowRight, X, ArrowLeft } from 'lucide-react';
@@ -11,12 +11,29 @@ type AuthMode = 'signin' | 'signup' | 'forgot';
 
 export default function Auth() {
   const { user, loading, signIn, signUp } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState<AuthMode>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Handle query params for prefilled email and mode
+  useEffect(() => {
+    const mode = searchParams.get('mode');
+    const prefillEmail = searchParams.get('email');
+
+    if (mode === 'forgot') {
+      setAuthMode('forgot');
+      setShowAuthModal(true);
+      if (prefillEmail) {
+        setEmail(prefillEmail);
+      }
+      // Clean up the URL
+      setSearchParams({});
+    }
+  }, [searchParams, setSearchParams]);
 
   // Redirect if already logged in
   if (!loading && user) {

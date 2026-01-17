@@ -131,12 +131,20 @@ export default function ResetPassword() {
           <p className="text-muted-foreground mb-6">
             This password reset link is invalid or has expired. Please request a new one.
           </p>
-          <button
-            onClick={() => navigate('/auth')}
-            className="btn-primary w-full py-3"
-          >
-            Back to Sign In
-          </button>
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={() => navigate('/auth?mode=forgot')}
+              className="btn-primary w-full py-3"
+            >
+              Resend Reset Email
+            </button>
+            <button
+              onClick={() => navigate('/auth')}
+              className="w-full py-3 text-muted-foreground hover:text-foreground transition-colors text-sm"
+            >
+              Back to Sign In
+            </button>
+          </div>
         </div>
       </div>
     );
