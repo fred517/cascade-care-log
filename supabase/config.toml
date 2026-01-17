@@ -7,7 +7,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.get-weather]
-verify_jwt = true
+verify_jwt = false
 
 [functions.send-odour-alert]
-verify_jwt = true
+verify_jwt = false
