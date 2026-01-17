@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { EmailRecipients } from '@/components/settings/EmailRecipients';
 import { SiteSettings } from '@/components/settings/SiteSettings';
+import { UserManagement } from '@/components/settings/UserManagement';
 import { Threshold, MetricType, METRICS } from '@/types/wastewater';
 import { useReadings } from '@/hooks/useReadings';
 import { useSite } from '@/hooks/useSite';
@@ -9,10 +10,10 @@ import { useAuth } from '@/hooks/useAuth';
 import { useMissingReadingsReminder } from '@/hooks/useMissingReadingsReminder';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
-import { Sliders, Bell, Users, Building2, Check, RotateCcw, Loader2, Send, AlertCircle, CheckCircle2, FileText, ShieldAlert } from 'lucide-react';
+import { Sliders, Bell, Users, Building2, Check, RotateCcw, Loader2, Send, AlertCircle, CheckCircle2, FileText, ShieldAlert, UserCog } from 'lucide-react';
 import { toast } from 'sonner';
 
-type SettingsTab = 'thresholds' | 'notifications' | 'team' | 'site';
+type SettingsTab = 'thresholds' | 'notifications' | 'team' | 'users' | 'site';
 
 export default function Settings() {
   const { site, loading: siteLoading } = useSite();
@@ -52,38 +53,39 @@ export default function Settings() {
   }, [thresholds]);
 
   // Fetch team members
-  useEffect(() => {
-    const fetchTeam = async () => {
-      const { data } = await supabase
-        .from('profiles')
-        .select(`
-          id,
-          user_id,
-          display_name,
-          email
-        `)
-        .limit(20);
+  const fetchTeam = useCallback(async () => {
+    const { data } = await supabase
+      .from('profiles')
+      .select(`
+        id,
+        user_id,
+        display_name,
+        email
+      `)
+      .limit(50);
 
-      if (data) {
-        // Get roles for each user
-        const membersWithRoles = await Promise.all(
-          data.map(async (member) => {
-            const { data: roleData } = await supabase
-              .rpc('get_user_role', { _user_id: member.user_id });
-            return { ...member, role: roleData || 'operator' };
-          })
-        );
-        setTeamMembers(membersWithRoles);
-      }
-    };
-
-    fetchTeam();
+    if (data) {
+      // Get roles for each user
+      const membersWithRoles = await Promise.all(
+        data.map(async (member) => {
+          const { data: roleData } = await supabase
+            .rpc('get_user_role', { _user_id: member.user_id });
+          return { ...member, role: roleData || 'operator' };
+        })
+      );
+      setTeamMembers(membersWithRoles);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchTeam();
+  }, [fetchTeam]);
 
   const tabs = [
     { key: 'thresholds' as const, label: 'Thresholds', icon: Sliders },
     { key: 'notifications' as const, label: 'Notifications', icon: Bell },
     { key: 'team' as const, label: 'Team', icon: Users },
+    { key: 'users' as const, label: 'User Roles', icon: UserCog, adminOnly: true },
     { key: 'site' as const, label: 'Site', icon: Building2 },
   ];
 
@@ -162,7 +164,9 @@ export default function Settings() {
 
         {/* Tabs */}
         <div className="flex flex-wrap gap-2 mb-6 p-1 bg-muted/50 rounded-xl">
-          {tabs.map(({ key, label, icon: Icon }) => (
+          {tabs
+            .filter(tab => !tab.adminOnly || isAdmin)
+            .map(({ key, label, icon: Icon, adminOnly }) => (
             <button
               key={key}
               onClick={() => setActiveTab(key)}
@@ -175,6 +179,11 @@ export default function Settings() {
             >
               <Icon className="w-4 h-4" />
               {label}
+              {adminOnly && (
+                <span className="text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded-full">
+                  Admin
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -583,6 +592,10 @@ export default function Settings() {
                 )}
               </div>
             </div>
+          )}
+
+          {activeTab === 'users' && (
+            <UserManagement teamMembers={teamMembers} onRoleUpdated={fetchTeam} />
           )}
 
           {activeTab === 'site' && (
