@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import { createIncident, getSitemap, listIncidents, uploadSitemap, OdourIncident, SitemapRecord } from "@/lib/odourRepo";
 
 // Replace this with your real map component.
@@ -35,9 +36,8 @@ function FakeMap({
   );
 }
 
-export default function OdourMappingPage(props: { siteId: string }) {
-  const siteId = props.siteId; // pass from router/org context
-
+export default function OdourMappingPage() {
+  const [siteId, setSiteId] = useState<string | null>(null);
   const [sitemap, setSitemap] = useState<SitemapRecord | null>(null);
   const [incidents, setIncidents] = useState<OdourIncident[]>([]);
   const [picked, setPicked] = useState<{ lat: number; lng: number } | null>(null);
@@ -49,19 +49,28 @@ export default function OdourMappingPage(props: { siteId: string }) {
 
   const sitemapUrl = sitemap?.public_url ?? null;
 
-  async function refreshAll() {
-    const [sm, inc] = await Promise.all([getSitemap(siteId), listIncidents(siteId)]);
+  // Get user ID as site ID on mount
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      const userId = data.user?.id;
+      if (userId) setSiteId(userId);
+    });
+  }, []);
+
+  async function refreshAll(id: string) {
+    const [sm, inc] = await Promise.all([getSitemap(id), listIncidents(id)]);
     setSitemap(sm);
     setIncidents(inc);
   }
 
   useEffect(() => {
+    if (!siteId) return;
     setError(null);
-    refreshAll().catch((e: any) => setError(e?.message ?? String(e)));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    refreshAll(siteId).catch((e: any) => setError(e?.message ?? String(e)));
   }, [siteId]);
 
   async function onUpload(file: File) {
+    if (!siteId) return;
     setBusy(true);
     setError(null);
     try {
@@ -75,6 +84,7 @@ export default function OdourMappingPage(props: { siteId: string }) {
   }
 
   async function onCreateIncident() {
+    if (!siteId) return;
     setBusy(true);
     setError(null);
     try {
@@ -100,6 +110,10 @@ export default function OdourMappingPage(props: { siteId: string }) {
     } finally {
       setBusy(false);
     }
+  }
+
+  if (!siteId) {
+    return <div style={{ padding: 16 }}>Loading...</div>;
   }
 
   return (
