@@ -22,10 +22,20 @@ export default function Auth() {
   // Handle query params for prefilled email and mode
   useEffect(() => {
     const mode = searchParams.get('mode');
-    const prefillEmail = searchParams.get('email');
+    const prefillEmail = searchParams.get('email') || searchParams.get('prefill');
+    const invited = searchParams.get('invited');
 
     if (mode === 'forgot') {
       setAuthMode('forgot');
+      setShowAuthModal(true);
+      if (prefillEmail) {
+        setEmail(prefillEmail);
+      }
+      // Clean up the URL
+      setSearchParams({});
+    } else if (prefillEmail || invited) {
+      // Handle invitation link
+      setAuthMode('signup');
       setShowAuthModal(true);
       if (prefillEmail) {
         setEmail(prefillEmail);
