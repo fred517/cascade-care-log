@@ -70,8 +70,11 @@ export default function Auth() {
         if (error) {
           toast.error(error.message);
         } else {
-          toast.success('Account created successfully! You can now sign in.');
-          setAuthMode('signin');
+          toast.success('Account created! Please wait for admin approval before you can access the app.');
+          setShowAuthModal(false);
+          setEmail('');
+          setPassword('');
+          setDisplayName('');
         }
       } else {
         const { error } = await signIn(email, password);
@@ -340,7 +343,7 @@ export default function Auth() {
             {authMode === 'signup' && (
               <div className="px-8 pb-6">
                 <p className="text-xs text-center text-muted-foreground">
-                  New accounts are assigned the Operator role by default.
+                  New accounts require administrator approval before access is granted.
                 </p>
               </div>
             )}
