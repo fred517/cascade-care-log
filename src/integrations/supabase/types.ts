@@ -874,6 +874,36 @@ export type Database = {
           },
         ]
       }
+      support_audit_log: {
+        Row: {
+          acted_by: string
+          action: string
+          created_at: string
+          details: Json | null
+          id: string
+          org_id: string | null
+          site_id: string | null
+        }
+        Insert: {
+          acted_by: string
+          action: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+          org_id?: string | null
+          site_id?: string | null
+        }
+        Update: {
+          acted_by?: string
+          action?: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+          org_id?: string | null
+          site_id?: string | null
+        }
+        Relationships: []
+      }
       thresholds: {
         Row: {
           created_at: string
