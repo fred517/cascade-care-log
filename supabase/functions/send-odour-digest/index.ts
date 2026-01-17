@@ -387,6 +387,7 @@ const handler = async (req: Request): Promise<Response> => {
               subject: `Weekly Odour Digest - ${site.name}`,
               status: "failed",
               fail_reason: sendError.message,
+              site_id: site.id,
             });
           } else {
             console.log(`Sent digest to ${recipient.email}`);
@@ -397,6 +398,7 @@ const handler = async (req: Request): Promise<Response> => {
               subject: `Weekly Odour Digest - ${site.name}`,
               status: "sent",
               sent_at: new Date().toISOString(),
+              site_id: site.id,
             });
           }
         } catch (err) {

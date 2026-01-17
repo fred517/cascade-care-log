@@ -305,6 +305,7 @@ const handler = async (req: Request): Promise<Response> => {
             status: "sent",
             provider_id: emailResponse.data?.id,
             sent_at: new Date().toISOString(),
+            site_id: site.id,
           });
 
           console.log(`Reminder sent to ${recipient.email} for site ${site.name}`);
@@ -317,6 +318,7 @@ const handler = async (req: Request): Promise<Response> => {
             subject,
             status: "failed",
             fail_reason: emailError.message,
+            site_id: site.id,
           });
         }
       }
