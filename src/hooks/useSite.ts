@@ -7,6 +7,7 @@ interface Site {
   name: string;
   timezone: string;
   ammonia_basis: string;
+  address?: string;
 }
 
 export function useSite() {
