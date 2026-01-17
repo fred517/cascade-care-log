@@ -747,6 +747,47 @@ export type Database = {
         }
         Relationships: []
       }
+      weather_snapshots: {
+        Row: {
+          created_at: string | null
+          id: string
+          recorded_at: string
+          site_id: string
+          stability_class: string | null
+          temperature_c: number | null
+          wind_direction_deg: number | null
+          wind_speed_mps: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          recorded_at: string
+          site_id: string
+          stability_class?: string | null
+          temperature_c?: number | null
+          wind_direction_deg?: number | null
+          wind_speed_mps?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          recorded_at?: string
+          site_id?: string
+          stability_class?: string | null
+          temperature_c?: number | null
+          wind_direction_deg?: number | null
+          wind_speed_mps?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "weather_snapshots_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
