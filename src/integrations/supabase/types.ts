@@ -853,6 +853,44 @@ export type Database = {
           },
         ]
       }
+      site_metric_config: {
+        Row: {
+          created_at: string
+          display_order: number | null
+          id: string
+          is_enabled: boolean
+          metric_id: string
+          site_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          display_order?: number | null
+          id?: string
+          is_enabled?: boolean
+          metric_id: string
+          site_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          display_order?: number | null
+          id?: string
+          is_enabled?: boolean
+          metric_id?: string
+          site_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "site_metric_config_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sites: {
         Row: {
           address: string | null
