@@ -1,13 +1,16 @@
 import { useState, useRef, useEffect } from 'react';
-import { MapPin, AlertTriangle, Wind, History } from 'lucide-react';
+import { MapPin, AlertTriangle, Wind, History, Factory, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { SiteMap, OdourIncident } from '@/types/odour';
 import DispersionPlume, { PlumeInfoPanel, PlumeLegend } from './DispersionPlume';
 import PlumePlayback, { usePlumePlayback } from './PlumePlayback';
 import { useLatestWeatherSnapshot, useWeatherSnapshots } from '@/hooks/useWeatherSnapshots';
+import { useOdourSources, useCreateOdourSource, type OdourSource } from '@/hooks/useOdourSources';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface InteractiveSiteMapProps {
   siteMap: SiteMap;
@@ -17,16 +20,21 @@ interface InteractiveSiteMapProps {
 }
 
 type PlumeMode = 'live' | 'history';
+type ClickMode = 'incident' | 'source';
 
 export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onIncidentClick }: InteractiveSiteMapProps) {
   const [hoveredIncident, setHoveredIncident] = useState<string | null>(null);
+  const [hoveredSource, setHoveredSource] = useState<string | null>(null);
   const [showPlumes, setShowPlumes] = useState(true);
   const [plumeMode, setPlumeMode] = useState<PlumeMode>('live');
+  const [clickMode, setClickMode] = useState<ClickMode>('incident');
   const [containerWidth, setContainerWidth] = useState(800);
   const imageRef = useRef<HTMLDivElement>(null);
   
   const { data: latestSnapshot, isLoading: latestLoading } = useLatestWeatherSnapshot();
-  const { data: historicalSnapshots = [], isLoading: historyLoading } = useWeatherSnapshots(48); // Last 48 hours
+  const { data: historicalSnapshots = [], isLoading: historyLoading } = useWeatherSnapshots(48);
+  const { data: odourSources = [] } = useOdourSources();
+  const createSource = useCreateOdourSource();
   
   const {
     currentIndex,
@@ -36,10 +44,8 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
     currentSnapshot: playbackSnapshot,
   } = usePlumePlayback(historicalSnapshots);
 
-  // Choose which snapshot to use based on mode
   const activeSnapshot = plumeMode === 'live' ? latestSnapshot : playbackSnapshot;
 
-  // Track container size for plume scaling
   useEffect(() => {
     if (!imageRef.current) return;
     
@@ -53,7 +59,6 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
     return () => observer.disconnect();
   }, []);
 
-  // Stop playback when switching to live mode
   useEffect(() => {
     if (plumeMode === 'live') {
       setIsPlaying(false);
@@ -67,7 +72,16 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
     const x = ((e.clientX - rect.left) / rect.width) * 100;
     const y = ((e.clientY - rect.top) / rect.height) * 100;
     
-    onMapClick({ x, y });
+    if (clickMode === 'source') {
+      createSource.mutate({
+        name: `Source ${odourSources.length + 1}`,
+        geometry: { type: 'point', x, y },
+        base_intensity: 3,
+      });
+      setClickMode('incident');
+    } else {
+      onMapClick({ x, y });
+    }
   };
 
   const getIncidentColor = (incident: OdourIncident) => {
@@ -83,14 +97,11 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
     return 'bg-orange-500';
   };
 
-  // Filter to show only open/investigating incidents - resolved/closed are hidden from map
   const visibleIncidents = incidents.filter(incident => {
     if (incident.site_map_id !== siteMap.id) return false;
-    // Only show open or investigating incidents on the map
     return incident.status === 'open' || incident.status === 'investigating';
   });
 
-  // Check if we have valid weather data for plumes
   const hasWeatherData = activeSnapshot && 
     activeSnapshot.wind_speed_mps !== null && 
     activeSnapshot.wind_direction_deg !== null &&
@@ -98,11 +109,26 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
 
   const hasHistoricalData = historicalSnapshots.length > 1;
 
+  // Get source position for rendering
+  const getSourcePosition = (source: OdourSource): { x: number; y: number } | null => {
+    if (source.geometry.type === 'point' && source.geometry.x !== undefined && source.geometry.y !== undefined) {
+      return { x: source.geometry.x, y: source.geometry.y };
+    }
+    // For polygons, use centroid
+    if (source.geometry.type === 'polygon' && source.geometry.coordinates?.length) {
+      const coords = source.geometry.coordinates;
+      const x = coords.reduce((sum, c) => sum + c.x, 0) / coords.length;
+      const y = coords.reduce((sum, c) => sum + c.y, 0) / coords.length;
+      return { x, y };
+    }
+    return null;
+  };
+
   return (
     <div className="relative space-y-3">
-      {/* Plume controls */}
+      {/* Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 flex-wrap">
           <div className="flex items-center gap-2">
             <Switch
               id="show-plumes"
@@ -131,12 +157,30 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
           )}
         </div>
         
-        {(latestLoading || historyLoading) && (
-          <span className="text-xs text-muted-foreground">Loading weather data...</span>
-        )}
+        <div className="flex items-center gap-2">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={clickMode === 'source' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setClickMode(clickMode === 'source' ? 'incident' : 'source')}
+              >
+                <Factory className="w-4 h-4 mr-1" />
+                {clickMode === 'source' ? 'Click map to place' : 'Add Source'}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Define odour emission sources for plume modeling</p>
+            </TooltipContent>
+          </Tooltip>
+          
+          {(latestLoading || historyLoading) && (
+            <span className="text-xs text-muted-foreground">Loading...</span>
+          )}
+        </div>
       </div>
 
-      {/* Playback controls when in history mode */}
+      {/* Playback controls */}
       {showPlumes && plumeMode === 'history' && (
         <PlumePlayback
           snapshots={historicalSnapshots}
@@ -149,7 +193,10 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
 
       <div
         ref={imageRef}
-        className="relative cursor-crosshair rounded-xl overflow-hidden border border-border"
+        className={cn(
+          "relative rounded-xl overflow-hidden border border-border",
+          clickMode === 'source' ? 'cursor-crosshair' : 'cursor-crosshair'
+        )}
         onClick={handleClick}
       >
         <img
@@ -159,19 +206,61 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
           draggable={false}
         />
         
-        {/* Dispersion plumes for active incidents */}
-        {showPlumes && hasWeatherData && visibleIncidents.map((incident) => (
-          <DispersionPlume
-            key={`plume-${incident.id}-${activeSnapshot.id}`}
-            sourceX={incident.click_x}
-            sourceY={incident.click_y}
-            windDirection={activeSnapshot.wind_direction_deg!}
-            windSpeed={activeSnapshot.wind_speed_mps!}
-            stabilityClass={activeSnapshot.stability_class!}
-            intensity={incident.intensity || 3}
-            containerWidth={containerWidth}
-          />
-        ))}
+        {/* Dispersion plumes from defined odour sources */}
+        {showPlumes && hasWeatherData && odourSources.map((source) => {
+          const pos = getSourcePosition(source);
+          if (!pos) return null;
+          
+          return (
+            <DispersionPlume
+              key={`plume-source-${source.id}-${activeSnapshot.id}`}
+              sourceX={pos.x}
+              sourceY={pos.y}
+              windDirection={activeSnapshot.wind_direction_deg!}
+              windSpeed={activeSnapshot.wind_speed_mps!}
+              stabilityClass={activeSnapshot.stability_class!}
+              intensity={source.base_intensity || 3}
+              containerWidth={containerWidth}
+            />
+          );
+        })}
+        
+        {/* Odour source markers */}
+        {odourSources.map((source) => {
+          const pos = getSourcePosition(source);
+          if (!pos) return null;
+          
+          return (
+            <div
+              key={`source-${source.id}`}
+              className="absolute transform -translate-x-1/2 -translate-y-1/2 cursor-pointer z-10"
+              style={{
+                left: `${pos.x}%`,
+                top: `${pos.y}%`,
+              }}
+              onMouseEnter={() => setHoveredSource(source.id)}
+              onMouseLeave={() => setHoveredSource(null)}
+            >
+              <div
+                className={cn(
+                  'w-7 h-7 rounded-lg flex items-center justify-center shadow-lg transition-transform bg-primary border-2 border-primary-foreground',
+                  hoveredSource === source.id && 'scale-110'
+                )}
+              >
+                <Factory className="w-4 h-4 text-primary-foreground" />
+              </div>
+              
+              {hoveredSource === source.id && (
+                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-40 bg-popover text-popover-foreground rounded-lg p-2 shadow-lg text-xs z-20">
+                  <p className="font-semibold">{source.name || 'Odour Source'}</p>
+                  <p className="text-muted-foreground">
+                    Intensity: {source.base_intensity || 3}/5
+                  </p>
+                </div>
+              )}
+            </div>
+          );
+        })}
         
         {/* Incident markers */}
         {visibleIncidents.map((incident) => (
@@ -199,7 +288,6 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
               <AlertTriangle className="w-3.5 h-3.5 text-white" />
             </div>
             
-            {/* Tooltip on hover */}
             {hoveredIncident === incident.id && (
               <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-48 bg-popover text-popover-foreground rounded-lg p-2 shadow-lg text-xs z-20">
                 <p className="font-semibold">{incident.odour_type?.replace('_', ' ')}</p>
@@ -215,7 +303,7 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
           </div>
         ))}
         
-        {/* Weather info panel - only in live mode */}
+        {/* Weather info panel */}
         {showPlumes && plumeMode === 'live' && hasWeatherData && (
           <PlumeInfoPanel
             windSpeed={activeSnapshot.wind_speed_mps!}
@@ -228,8 +316,17 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
         {/* Click instruction overlay */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-0 hover:opacity-100 transition-opacity bg-black/10">
           <div className="bg-background/90 px-3 py-2 rounded-lg shadow-lg flex items-center gap-2">
-            <MapPin className="w-4 h-4 text-primary" />
-            <span className="text-sm font-medium">Click to report odour</span>
+            {clickMode === 'source' ? (
+              <>
+                <Factory className="w-4 h-4 text-primary" />
+                <span className="text-sm font-medium">Click to add odour source</span>
+              </>
+            ) : (
+              <>
+                <MapPin className="w-4 h-4 text-primary" />
+                <span className="text-sm font-medium">Click to report odour</span>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -237,8 +334,14 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
       {/* Legend */}
       <div className="flex flex-wrap gap-4 text-xs">
         <div className="flex items-center gap-1.5">
+          <div className="w-4 h-4 rounded-lg bg-primary flex items-center justify-center">
+            <Factory className="w-2.5 h-2.5 text-primary-foreground" />
+          </div>
+          <span>Odour source</span>
+        </div>
+        <div className="flex items-center gap-1.5">
           <div className="w-3 h-3 rounded-full bg-red-500" />
-          <span>High intensity</span>
+          <span>High intensity incident</span>
         </div>
         <div className="flex items-center gap-1.5">
           <div className="w-3 h-3 rounded-full bg-yellow-500" />
@@ -248,13 +351,8 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
           <div className="w-3 h-3 rounded-full bg-orange-500" />
           <span>Low</span>
         </div>
-        <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded-full bg-green-500" />
-          <span>Resolved</span>
-        </div>
       </div>
       
-      {/* Plume legend when enabled */}
       {showPlumes && hasWeatherData && <PlumeLegend />}
     </div>
   );
