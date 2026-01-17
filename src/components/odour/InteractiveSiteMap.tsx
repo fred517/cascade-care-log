@@ -68,6 +68,18 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
     }
   }, [plumeMode, setIsPlaying]);
 
+  // Escape key to cancel placement mode
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && clickMode !== 'none') {
+        setClickMode('none');
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [clickMode]);
+
   const handleClick = (e: React.MouseEvent) => {
     if (!imageRef.current) return;
     if (clickMode === 'none') return;
