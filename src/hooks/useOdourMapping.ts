@@ -5,6 +5,7 @@ import { useAuth } from './useAuth';
 import { toast } from 'sonner';
 import type { SiteMap, OdourIncident, WeatherData } from '@/types/odour';
 
+// Legacy site maps hook (for backward compatibility)
 export function useSiteMaps() {
   const { site } = useSite();
 
@@ -62,67 +63,59 @@ export function useCreateSiteMap() {
   });
 }
 
-export function useOdourIncidents() {
-  const { site } = useSite();
-
+// Facility-based odour incidents hooks
+export function useOdourIncidents(facilityId?: string) {
   return useQuery({
-    queryKey: ['odour-incidents', site?.id],
+    queryKey: ['odour-incidents', facilityId],
     queryFn: async () => {
-      if (!site?.id) return [];
+      if (!facilityId) return [];
       
       const { data, error } = await supabase
         .from('odour_incidents')
         .select('*')
-        .eq('site_id', site.id)
-        .order('incident_at', { ascending: false });
+        .eq('facility_id', facilityId)
+        .order('occurred_at', { ascending: false });
       
       if (error) throw error;
       return data as OdourIncident[];
     },
-    enabled: !!site?.id,
+    enabled: !!facilityId,
   });
 }
 
 export function useCreateOdourIncident() {
   const queryClient = useQueryClient();
-  const { site } = useSite();
   const { user } = useAuth();
 
   return useMutation({
-    mutationFn: async (incident: Partial<OdourIncident>) => {
-      if (!site?.id || !user?.id) throw new Error('No site or user');
+    mutationFn: async (incident: {
+      facility_id: string;
+      lat: number;
+      lng: number;
+      intensity?: number | null;
+      description?: string | null;
+      wind_speed?: number | null;
+      wind_dir?: number | null;
+      temperature?: number | null;
+      humidity?: number | null;
+      occurred_at?: string;
+    }) => {
+      if (!user?.id) throw new Error('No user');
       
       const { data, error } = await supabase
         .from('odour_incidents')
         .insert({
-          click_x: incident.click_x!,
-          click_y: incident.click_y!,
-          site_id: site.id,
+          facility_id: incident.facility_id,
+          lat: incident.lat,
+          lng: incident.lng,
+          intensity: incident.intensity ?? null,
+          description: incident.description ?? null,
+          wind_speed: incident.wind_speed ?? null,
+          wind_dir: incident.wind_dir ?? null,
+          temperature: incident.temperature ?? null,
+          humidity: incident.humidity ?? null,
           created_by: user.id,
-          site_map_id: incident.site_map_id,
-          latitude: incident.latitude,
-          longitude: incident.longitude,
-          incident_at: incident.incident_at,
-          frequency: incident.frequency,
-          intensity: incident.intensity,
-          duration: incident.duration,
-          offensiveness: incident.offensiveness,
-          location_impact: incident.location_impact,
-          odour_type: incident.odour_type,
-          wind_speed: incident.wind_speed,
-          wind_direction: incident.wind_direction,
-          wind_direction_text: incident.wind_direction_text,
-          temperature: incident.temperature,
-          humidity: incident.humidity,
-          pressure: incident.pressure,
-          weather_description: incident.weather_description,
-          weather_fetched_at: incident.weather_fetched_at,
-          notes: incident.notes,
-          source_suspected: incident.source_suspected,
-          corrective_actions: incident.corrective_actions,
-          follow_up_date: incident.follow_up_date,
-          follow_up_notes: incident.follow_up_notes,
-          status: incident.status || 'open',
+          occurred_at: incident.occurred_at ?? new Date().toISOString(),
         })
         .select()
         .single();
@@ -137,19 +130,14 @@ export function useCreateOdourIncident() {
           await supabase.functions.invoke('send-odour-alert', {
             body: {
               incidentId: createdIncident.id,
-              odourType: incident.odour_type,
               intensity: incident.intensity,
-              frequency: incident.frequency,
-              offensiveness: incident.offensiveness,
-              duration: incident.duration,
-              locationImpact: incident.location_impact,
-              sourceSuspected: incident.source_suspected,
+              description: incident.description,
+              lat: incident.lat,
+              lng: incident.lng,
               windSpeed: incident.wind_speed,
-              windDirection: incident.wind_direction_text,
               temperature: incident.temperature,
-              incidentAt: incident.incident_at,
-              siteName: site.name,
-              siteId: site.id,
+              occurredAt: incident.occurred_at,
+              facilityId: incident.facility_id,
             },
           });
           console.log('Odour alert email sent for high-intensity incident');
