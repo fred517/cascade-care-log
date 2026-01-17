@@ -8,7 +8,7 @@ import { useSite } from '@/hooks/useSite';
 import { useMissingReadingsReminder } from '@/hooks/useMissingReadingsReminder';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
-import { Sliders, Bell, Users, Building2, Check, RotateCcw, Loader2, Send, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Sliders, Bell, Users, Building2, Check, RotateCcw, Loader2, Send, AlertCircle, CheckCircle2, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 
 type SettingsTab = 'thresholds' | 'notifications' | 'team' | 'site';
@@ -28,6 +28,8 @@ export default function Settings() {
   });
   const [isSaving, setIsSaving] = useState(false);
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
+  const [sendingDigest, setSendingDigest] = useState(false);
+  const [digestResult, setDigestResult] = useState<any>(null);
 
   // Initialize local thresholds from database
   useEffect(() => {
@@ -109,6 +111,26 @@ export default function Settings() {
       toast.error('Failed to save thresholds');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleSendDigest = async () => {
+    setSendingDigest(true);
+    setDigestResult(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('send-odour-digest', {
+        body: { siteId: site?.id },
+      });
+
+      if (error) throw error;
+      
+      setDigestResult(data);
+      toast.success('Weekly digest sent successfully');
+    } catch (error: any) {
+      console.error('Error sending digest:', error);
+      toast.error('Failed to send weekly digest');
+    } finally {
+      setSendingDigest(false);
     }
   };
 
@@ -376,6 +398,94 @@ export default function Settings() {
 
                 <p className="text-xs text-muted-foreground mt-4">
                   💡 Tip: For automated daily reminders, consider setting up a scheduled job to call this function at the end of each shift.
+                </p>
+              </div>
+
+              {/* Weekly Odour Digest Section */}
+              <div className="border-t border-border pt-8">
+                <div className="mb-6">
+                  <h2 className="text-xl font-semibold text-foreground mb-1">
+                    Weekly Odour Digest
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    Send a summary email of odour incidents from the past week to all active recipients.
+                  </p>
+                </div>
+
+                <div className="bg-muted/30 rounded-xl p-6 border border-border">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div>
+                      <h3 className="font-medium text-foreground mb-1">Send Weekly Digest Now</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Generate and send a summary of all odour incidents from the past 7 days.
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleSendDigest}
+                      disabled={sendingDigest}
+                      className="flex items-center gap-2 btn-primary whitespace-nowrap disabled:opacity-50"
+                    >
+                      {sendingDigest ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Sending...
+                        </>
+                      ) : (
+                        <>
+                          <FileText className="w-4 h-4" />
+                          Send Digest
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Digest result */}
+                  {digestResult && digestResult.results && (
+                    <div className="mt-4 pt-4 border-t border-border">
+                      <h4 className="text-sm font-medium text-muted-foreground mb-3">Digest Results</h4>
+                      <div className="space-y-2">
+                        {digestResult.results.map((result: any, index: number) => (
+                          <div 
+                            key={index}
+                            className={cn(
+                              "flex items-center justify-between p-3 rounded-lg",
+                              result.emailsSent > 0 
+                                ? "bg-status-normal/10 border border-status-normal/30"
+                                : "bg-muted/50 border border-border"
+                            )}
+                          >
+                            <div className="flex items-center gap-3">
+                              {result.emailsSent > 0 ? (
+                                <CheckCircle2 className="w-5 h-5 text-status-normal" />
+                              ) : (
+                                <AlertCircle className="w-5 h-5 text-muted-foreground" />
+                              )}
+                              <div>
+                                <p className="font-medium text-foreground">{result.site}</p>
+                                <p className="text-sm text-muted-foreground">
+                                  {result.incidentCount} incidents this week
+                                </p>
+                              </div>
+                            </div>
+                            {result.emailsSent > 0 && (
+                              <span className="text-xs bg-status-normal/20 text-status-normal px-2 py-1 rounded-full">
+                                Sent to {result.emailsSent} recipient{result.emailsSent > 1 ? 's' : ''}
+                              </span>
+                            )}
+                            {result.emailsSent === 0 && result.incidentCount === 0 && (
+                              <span className="text-xs bg-muted text-muted-foreground px-2 py-1 rounded-full">
+                                No incidents
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <p className="text-xs text-muted-foreground mt-4">
+                  💡 Tip: Set up a weekly cron job to automatically send this digest every Monday morning.
                 </p>
               </div>
             </div>
