@@ -26,14 +26,14 @@ interface PlumePoint {
   y: number;
 }
 
-// Pasquill-Gifford stability class dispersion parameters
-const STABILITY_PARAMS: Record<string, { sigmaY: number; sigmaZ: number; spreadFactor: number }> = {
-  A: { sigmaY: 0.22, sigmaZ: 0.20, spreadFactor: 1.8 },  // Very unstable
-  B: { sigmaY: 0.16, sigmaZ: 0.12, spreadFactor: 1.5 },  // Unstable
-  C: { sigmaY: 0.11, sigmaZ: 0.08, spreadFactor: 1.2 },  // Slightly unstable
-  D: { sigmaY: 0.08, sigmaZ: 0.06, spreadFactor: 1.0 },  // Neutral
-  E: { sigmaY: 0.06, sigmaZ: 0.03, spreadFactor: 0.8 },  // Slightly stable
-  F: { sigmaY: 0.04, sigmaZ: 0.02, spreadFactor: 0.6 },  // Stable
+// Stability class affects plume spreading
+const STABILITY_SPREAD: Record<string, number> = {
+  A: 0.35,  // Very unstable - wide spread
+  B: 0.30,  // Unstable
+  C: 0.27,  // Slightly unstable
+  D: 0.25,  // Neutral
+  E: 0.20,  // Slightly stable - narrow spread
+  F: 0.15,  // Stable - very narrow
 };
 
 function getSourceCenter(geometry: OdourSource["geometry"]): { x: number; y: number } | null {
@@ -48,30 +48,39 @@ function getSourceCenter(geometry: OdourSource["geometry"]): { x: number; y: num
   return null;
 }
 
-function generateGaussianPlumePolygon(
+// Intensity profile: exponential decay with distance
+function intensityAtDistance(baseIntensity: number, distance: number, maxDistance: number): number {
+  return baseIntensity * Math.exp(-distance / (maxDistance * 0.6));
+}
+
+interface PlumeResult {
+  geometry: PlumePoint[];
+  intensityProfile: { distance: number; intensity: number }[];
+}
+
+function generatePlume(
   sourceX: number,
   sourceY: number,
-  windDirection: number,
+  windDirDeg: number,
   windSpeed: number,
-  stabilityClass: string,
-  intensity: number
-): PlumePoint[] {
-  const params = STABILITY_PARAMS[stabilityClass] || STABILITY_PARAMS.D;
+  durationMin: number,
+  baseIntensity: number,
+  stabilityClass: string
+): PlumeResult {
+  // Calculate plume distance in map units (% of map)
+  // windSpeed is m/s, durationMin in minutes
+  // Scale factor converts meters to map percentage (assuming ~500m map width)
+  const metersToMapPercent = 0.02; // 1 meter = 0.02% of map
+  const distanceMeters = windSpeed * durationMin * 60;
+  const distance = Math.min(distanceMeters * metersToMapPercent, 60); // Cap at 60% of map
   
-  // Wind direction in radians (meteorological: direction wind comes FROM)
-  // We need the direction wind blows TO
-  const windRadians = ((windDirection + 180) % 360) * (Math.PI / 180);
+  // Plume width based on stability and distance
+  const spreadFactor = STABILITY_SPREAD[stabilityClass] || 0.25;
+  const plumeWidth = distance * spreadFactor;
   
-  // Calculate plume length based on wind speed and intensity
-  const baseLength = 15 + windSpeed * 4;
-  const plumeLength = baseLength * (intensity / 3) * params.spreadFactor;
-  
-  // Maximum width at the end of plume (lateral spread)
-  const maxWidth = plumeLength * params.sigmaY * 2;
-  
-  // Generate plume polygon points
-  const points: PlumePoint[] = [];
-  const segments = 12;
+  // Wind direction: meteorological convention (direction wind comes FROM)
+  // Convert to direction wind blows TO
+  const windRadians = ((windDirDeg + 180) % 360) * (Math.PI / 180);
   
   // Direction vectors
   const dx = Math.sin(windRadians);
@@ -81,14 +90,18 @@ function generateGaussianPlumePolygon(
   const px = Math.cos(windRadians);
   const py = Math.sin(windRadians);
   
-  // Starting point (source)
+  // Generate downwind cone polygon
+  const points: PlumePoint[] = [];
+  const segments = 16;
+  
+  // Starting point (source - slight offset for visual)
   points.push({ x: sourceX, y: sourceY });
   
-  // Right edge of plume (expanding outward)
+  // Right edge of cone (expanding outward)
   for (let i = 1; i <= segments; i++) {
     const t = i / segments;
-    const dist = plumeLength * t;
-    const width = maxWidth * t * 0.5; // Width increases along plume
+    const dist = distance * t;
+    const width = plumeWidth * t * 0.5; // Half-width on each side
     
     const centerX = sourceX + dx * dist;
     const centerY = sourceY + dy * dist;
@@ -99,16 +112,16 @@ function generateGaussianPlumePolygon(
     });
   }
   
-  // End cap
-  const endX = sourceX + dx * plumeLength;
-  const endY = sourceY + dy * plumeLength;
-  points.push({ x: endX, y: endY });
+  // Tip of cone (rounded end)
+  const tipX = sourceX + dx * distance;
+  const tipY = sourceY + dy * distance;
+  points.push({ x: tipX, y: tipY });
   
-  // Left edge of plume (contracting back)
+  // Left edge of cone (contracting back to source)
   for (let i = segments; i >= 1; i--) {
     const t = i / segments;
-    const dist = plumeLength * t;
-    const width = maxWidth * t * 0.5;
+    const dist = distance * t;
+    const width = plumeWidth * t * 0.5;
     
     const centerX = sourceX + dx * dist;
     const centerY = sourceY + dy * dist;
@@ -120,10 +133,25 @@ function generateGaussianPlumePolygon(
   }
   
   // Clamp coordinates to 0-100 range
-  return points.map(p => ({
+  const clampedPoints = points.map(p => ({
     x: Math.max(0, Math.min(100, p.x)),
     y: Math.max(0, Math.min(100, p.y)),
   }));
+  
+  // Calculate intensity profile along plume
+  const intensityProfile = [];
+  for (let i = 0; i <= 10; i++) {
+    const d = (i / 10) * distance;
+    intensityProfile.push({
+      distance: d,
+      intensity: intensityAtDistance(baseIntensity, d, distance),
+    });
+  }
+  
+  return {
+    geometry: clampedPoints,
+    intensityProfile,
+  };
 }
 
 Deno.serve(async (req) => {
@@ -220,18 +248,22 @@ Deno.serve(async (req) => {
 
       const intensity = source.base_intensity || 3;
       
-      // Generate Gaussian plume polygon
-      const plumePolygon = generateGaussianPlumePolygon(
+      // Default duration: 60 minutes for prediction window
+      const durationMin = 60;
+      
+      // Generate plume using new model
+      const plumeResult = generatePlume(
         center.x,
         center.y,
         weather.wind_direction_deg,
         weather.wind_speed_mps,
-        weather.stability_class,
-        intensity
+        durationMin,
+        intensity,
+        weather.stability_class
       );
 
-      // Calculate peak intensity (decreases with distance from source)
-      const peakIntensity = intensity * (1 + weather.wind_speed_mps * 0.1);
+      // Peak intensity based on base and wind
+      const peakIntensity = intensity * (1 + weather.wind_speed_mps * 0.05);
 
       const prediction = {
         site_id,
@@ -240,10 +272,10 @@ Deno.serve(async (req) => {
         valid_to: validTo.toISOString(),
         geometry: {
           type: "polygon",
-          coordinates: plumePolygon,
+          coordinates: plumeResult.geometry,
         },
         peak_intensity: Math.round(peakIntensity * 10) / 10,
-        model_version: "gaussian-v1.0",
+        model_version: "plume-v2.0",
       };
 
       predictions.push(prediction);
