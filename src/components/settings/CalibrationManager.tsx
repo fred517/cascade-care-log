@@ -182,6 +182,42 @@ function AddCalibrationDialog() {
   );
 }
 
+function QuickMarkDoneButton({ schedule }: { schedule: CalibrationSchedule }) {
+  const recordCalibration = useRecordCalibration();
+  const [isMarking, setIsMarking] = useState(false);
+
+  const handleMarkDone = async () => {
+    setIsMarking(true);
+    try {
+      await recordCalibration.mutateAsync({
+        schedule_id: schedule.id,
+        passed: true,
+        notes: 'Calibration completed (quick mark)',
+      });
+      toast({ 
+        title: 'Calibration Complete', 
+        description: `Next reminder in ${schedule.interval_days} days` 
+      });
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to mark calibration', variant: 'destructive' });
+    } finally {
+      setIsMarking(false);
+    }
+  };
+
+  return (
+    <Button 
+      size="sm" 
+      onClick={handleMarkDone}
+      disabled={isMarking}
+      className="bg-green-600 hover:bg-green-700"
+    >
+      <Check className="w-4 h-4 mr-1" />
+      {isMarking ? 'Saving...' : 'Done'}
+    </Button>
+  );
+}
+
 function RecordCalibrationDialog({ schedule }: { schedule: CalibrationSchedule }) {
   const [open, setOpen] = useState(false);
   const [preReading, setPreReading] = useState('');
@@ -214,7 +250,7 @@ function RecordCalibrationDialog({ schedule }: { schedule: CalibrationSchedule }
         notes: notes.trim() || undefined,
       });
 
-      toast({ title: 'Calibration Recorded', description: `Next due in ${schedule.interval_days} days` });
+      toast({ title: 'Calibration Recorded', description: `Next reminder in ${schedule.interval_days} days` });
       setOpen(false);
       setPreReading('');
       setPostReading('');
@@ -229,8 +265,8 @@ function RecordCalibrationDialog({ schedule }: { schedule: CalibrationSchedule }
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button size="sm" variant="outline">
-          <Check className="w-4 h-4 mr-1" />
-          Record
+          <Wrench className="w-4 h-4 mr-1" />
+          Details
         </Button>
       </DialogTrigger>
       <DialogContent>
@@ -322,6 +358,7 @@ function CalibrationItem({ schedule }: { schedule: CalibrationSchedule }) {
             <Badge variant={status.status === 'overdue' ? 'destructive' : 'secondary'} className="text-xs">
               {status.label}
             </Badge>
+            <QuickMarkDoneButton schedule={schedule} />
             <RecordCalibrationDialog schedule={schedule} />
             <CollapsibleTrigger asChild>
               <Button variant="ghost" size="sm">
