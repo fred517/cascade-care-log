@@ -26,3 +26,6 @@ verify_jwt = false
 
 [functions.send-calibration-reminders]
 verify_jwt = false
+
+[functions.set-support-status]
+verify_jwt = false
