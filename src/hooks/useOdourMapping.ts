@@ -128,11 +128,44 @@ export function useCreateOdourIncident() {
         .single();
       
       if (error) throw error;
-      return data as OdourIncident;
+      
+      const createdIncident = data as OdourIncident;
+      
+      // Send email alert for high-intensity incidents (4-5)
+      if (incident.intensity && incident.intensity >= 4) {
+        try {
+          await supabase.functions.invoke('send-odour-alert', {
+            body: {
+              incidentId: createdIncident.id,
+              odourType: incident.odour_type,
+              intensity: incident.intensity,
+              frequency: incident.frequency,
+              offensiveness: incident.offensiveness,
+              duration: incident.duration,
+              locationImpact: incident.location_impact,
+              sourceSuspected: incident.source_suspected,
+              windSpeed: incident.wind_speed,
+              windDirection: incident.wind_direction_text,
+              temperature: incident.temperature,
+              incidentAt: incident.incident_at,
+              siteName: site.name,
+            },
+          });
+          console.log('Odour alert email sent for high-intensity incident');
+        } catch (emailError) {
+          console.error('Failed to send odour alert email:', emailError);
+          // Don't throw - incident was still created successfully
+        }
+      }
+      
+      return createdIncident;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['odour-incidents'] });
       toast.success('Odour incident recorded successfully');
+      if (data.intensity && data.intensity >= 4) {
+        toast.info('Alert email sent to configured recipients');
+      }
     },
     onError: (error: Error) => {
       toast.error(`Failed to record incident: ${error.message}`);
