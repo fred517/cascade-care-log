@@ -8,6 +8,7 @@ interface TriggerAlertParams {
   thresholdMin?: number;
   thresholdMax?: number;
   siteName?: string;
+  siteId?: string;
   playbook?: string;
 }
 
@@ -18,6 +19,7 @@ export function useAlertEmail() {
     thresholdMin,
     thresholdMax,
     siteName = 'Main Treatment Plant',
+    siteId,
     playbook,
   }: TriggerAlertParams) => {
     const param = PARAMETERS[metricId];
@@ -56,6 +58,7 @@ export function useAlertEmail() {
           thresholdMax,
           severity,
           siteName,
+          siteId,
           triggeredAt: new Date().toISOString(),
           playbook,
           // Include action steps from parameter definition

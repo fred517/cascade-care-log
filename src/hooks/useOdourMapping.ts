@@ -149,6 +149,7 @@ export function useCreateOdourIncident() {
               temperature: incident.temperature,
               incidentAt: incident.incident_at,
               siteName: site.name,
+              siteId: site.id,
             },
           });
           console.log('Odour alert email sent for high-intensity incident');

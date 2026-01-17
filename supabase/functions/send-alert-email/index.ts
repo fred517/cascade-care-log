@@ -22,6 +22,7 @@ interface AlertEmailRequest {
   siteName?: string;
   triggeredAt: string;
   playbook?: string;
+  siteId?: string;
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -179,6 +180,7 @@ const handler = async (req: Request): Promise<Response> => {
           status: "sent",
           provider_id: emailResponse.data?.id,
           sent_at: new Date().toISOString(),
+          site_id: alertData.siteId || null,
         });
 
         emailResults.push({ email: recipient.email, status: "sent" });
@@ -191,6 +193,7 @@ const handler = async (req: Request): Promise<Response> => {
           subject,
           status: "failed",
           fail_reason: emailError.message,
+          site_id: alertData.siteId || null,
         });
 
         emailResults.push({ email: recipient.email, status: "failed", error: emailError.message });
