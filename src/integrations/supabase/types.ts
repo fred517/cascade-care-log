@@ -388,6 +388,7 @@ export type Database = {
       }
       odour_incidents: {
         Row: {
+          character: string | null
           created_at: string
           created_by: string | null
           description: string | null
@@ -397,12 +398,16 @@ export type Database = {
           intensity: number | null
           lat: number
           lng: number
+          notes: string | null
           occurred_at: string
+          site_id: string | null
           temperature: number | null
+          weather: Json | null
           wind_dir: number | null
           wind_speed: number | null
         }
         Insert: {
+          character?: string | null
           created_at?: string
           created_by?: string | null
           description?: string | null
@@ -412,12 +417,16 @@ export type Database = {
           intensity?: number | null
           lat: number
           lng: number
+          notes?: string | null
           occurred_at?: string
+          site_id?: string | null
           temperature?: number | null
+          weather?: Json | null
           wind_dir?: number | null
           wind_speed?: number | null
         }
         Update: {
+          character?: string | null
           created_at?: string
           created_by?: string | null
           description?: string | null
@@ -427,8 +436,11 @@ export type Database = {
           intensity?: number | null
           lat?: number
           lng?: number
+          notes?: string | null
           occurred_at?: string
+          site_id?: string | null
           temperature?: number | null
+          weather?: Json | null
           wind_dir?: number | null
           wind_speed?: number | null
         }
@@ -438,6 +450,13 @@ export type Database = {
             columns: ["facility_id"]
             isOneToOne: false
             referencedRelation: "facilities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "odour_incidents_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
             referencedColumns: ["id"]
           },
         ]
@@ -933,6 +952,41 @@ export type Database = {
             foreignKeyName: "site_metric_config_site_id_fkey"
             columns: ["site_id"]
             isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      site_sitemaps: {
+        Row: {
+          public_url: string
+          site_id: string
+          storage_bucket: string
+          storage_path: string
+          uploaded_at: string
+          uploaded_by: string
+        }
+        Insert: {
+          public_url: string
+          site_id: string
+          storage_bucket?: string
+          storage_path: string
+          uploaded_at?: string
+          uploaded_by: string
+        }
+        Update: {
+          public_url?: string
+          site_id?: string
+          storage_bucket?: string
+          storage_path?: string
+          uploaded_at?: string
+          uploaded_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "site_sitemaps_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: true
             referencedRelation: "sites"
             referencedColumns: ["id"]
           },
