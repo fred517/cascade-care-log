@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
-import { Shield, ShieldAlert, User, Loader2, Check, ChevronDown } from 'lucide-react';
+import { Shield, ShieldAlert, User, Loader2, Check, ChevronDown, UserPlus, Mail, Send } from 'lucide-react';
 import { toast } from 'sonner';
+import { z } from 'zod';
 
 type AppRole = 'operator' | 'supervisor' | 'admin';
 
@@ -26,10 +27,66 @@ const ROLE_OPTIONS: { value: AppRole; label: string; description: string }[] = [
   { value: 'admin', label: 'Admin', description: 'Full access including user management' },
 ];
 
+const inviteSchema = z.object({
+  email: z.string().trim().email({ message: "Please enter a valid email" }).max(255),
+  name: z.string().trim().max(100).optional(),
+  role: z.enum(['operator', 'supervisor', 'admin']),
+});
+
 export function UserManagement({ teamMembers, onRoleUpdated }: UserManagementProps) {
-  const { isAdmin, user } = useAuth();
+  const { isAdmin, user, profile } = useAuth();
   const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  
+  // Invite state
+  const [showInviteForm, setShowInviteForm] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteName, setInviteName] = useState('');
+  const [inviteRole, setInviteRole] = useState<AppRole>('operator');
+  const [sendingInvite, setSendingInvite] = useState(false);
+
+  const handleSendInvite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    const validation = inviteSchema.safeParse({
+      email: inviteEmail,
+      name: inviteName || undefined,
+      role: inviteRole,
+    });
+
+    if (!validation.success) {
+      toast.error(validation.error.errors[0]?.message || 'Invalid input');
+      return;
+    }
+
+    setSendingInvite(true);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('send-user-invite', {
+        body: {
+          email: inviteEmail.trim(),
+          name: inviteName.trim() || null,
+          role: inviteRole,
+          invitedBy: profile?.display_name || 'An administrator',
+          siteUrl: window.location.origin,
+        },
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      toast.success(`Invitation sent to ${inviteEmail}`);
+      setInviteEmail('');
+      setInviteName('');
+      setInviteRole('operator');
+      setShowInviteForm(false);
+    } catch (error: any) {
+      console.error('Error sending invite:', error);
+      toast.error(error.message || 'Failed to send invitation');
+    } finally {
+      setSendingInvite(false);
+    }
+  };
 
   const handleRoleChange = async (userId: string, newRole: AppRole) => {
     if (!isAdmin) {
@@ -94,14 +151,103 @@ export function UserManagement({ teamMembers, onRoleUpdated }: UserManagementPro
 
   return (
     <div>
-      <div className="mb-6">
-        <h2 className="text-xl font-semibold text-foreground mb-1">
-          User Role Management
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          Assign roles to control what each user can access and modify.
-        </p>
+      <div className="flex items-start justify-between mb-6">
+        <div>
+          <h2 className="text-xl font-semibold text-foreground mb-1">
+            User Role Management
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Assign roles to control what each user can access and modify.
+          </p>
+        </div>
+        <button
+          onClick={() => setShowInviteForm(!showInviteForm)}
+          className={cn(
+            "flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all",
+            showInviteForm
+              ? "bg-muted text-foreground"
+              : "bg-primary text-primary-foreground hover:bg-primary/90"
+          )}
+        >
+          <UserPlus className="w-4 h-4" />
+          Invite User
+        </button>
       </div>
+
+      {/* Invite Form */}
+      {showInviteForm && (
+        <form onSubmit={handleSendInvite} className="mb-6 p-4 bg-primary/5 rounded-xl border border-primary/20">
+          <h3 className="font-medium text-foreground mb-4 flex items-center gap-2">
+            <Mail className="w-4 h-4 text-primary" />
+            Send Invitation
+          </h3>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="sm:col-span-2 lg:col-span-1">
+              <label className="block text-sm font-medium text-foreground mb-1">
+                Email *
+              </label>
+              <input
+                type="email"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                placeholder="user@example.com"
+                className="input-field"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1">
+                Name (optional)
+              </label>
+              <input
+                type="text"
+                value={inviteName}
+                onChange={(e) => setInviteName(e.target.value)}
+                placeholder="John Smith"
+                className="input-field"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1">
+                Role
+              </label>
+              <select
+                value={inviteRole}
+                onChange={(e) => setInviteRole(e.target.value as AppRole)}
+                className="input-field"
+              >
+                {ROLE_OPTIONS.map((role) => (
+                  <option key={role.value} value={role.value}>
+                    {role.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-end">
+              <button
+                type="submit"
+                disabled={sendingInvite || !inviteEmail}
+                className="btn-primary w-full flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {sendingInvite ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4" />
+                    Send Invite
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground mt-3">
+            The user will receive an email with a link to create their account.
+          </p>
+        </form>
+      )}
 
       {/* Role Legend */}
       <div className="mb-6 p-4 bg-muted/30 rounded-xl border border-border">
