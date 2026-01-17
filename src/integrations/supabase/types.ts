@@ -325,6 +325,53 @@ export type Database = {
           },
         ]
       }
+      org_members: {
+        Row: {
+          created_at: string
+          org_id: string
+          role: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          org_id: string
+          role: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          org_id?: string
+          role?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_members_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      organizations: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -358,6 +405,41 @@ export type Database = {
         }
         Relationships: []
       }
+      reading_values: {
+        Row: {
+          created_at: string
+          id: string
+          parameter_key: string
+          quality_flag: string | null
+          reading_id: string
+          value: number | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          parameter_key: string
+          quality_flag?: string | null
+          reading_id: string
+          value?: number | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          parameter_key?: string
+          quality_flag?: string | null
+          reading_id?: string
+          value?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reading_values_reading_id_fkey"
+            columns: ["reading_id"]
+            isOneToOne: false
+            referencedRelation: "readings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       readings: {
         Row: {
           attachment_url: string | null
@@ -366,6 +448,7 @@ export type Database = {
           id: string
           metric_id: string
           notes: string | null
+          org_id: string | null
           recorded_at: string
           site_id: string
           updated_at: string
@@ -378,6 +461,7 @@ export type Database = {
           id?: string
           metric_id: string
           notes?: string | null
+          org_id?: string | null
           recorded_at?: string
           site_id: string
           updated_at?: string
@@ -390,12 +474,20 @@ export type Database = {
           id?: string
           metric_id?: string
           notes?: string | null
+          org_id?: string | null
           recorded_at?: string
           site_id?: string
           updated_at?: string
           value?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "readings_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "readings_site_id_fkey"
             columns: ["site_id"]
@@ -553,6 +645,7 @@ export type Database = {
           created_at: string
           id: string
           name: string
+          org_id: string | null
           timezone: string | null
           updated_at: string
         }
@@ -562,6 +655,7 @@ export type Database = {
           created_at?: string
           id?: string
           name: string
+          org_id?: string | null
           timezone?: string | null
           updated_at?: string
         }
@@ -571,10 +665,19 @@ export type Database = {
           created_at?: string
           id?: string
           name?: string
+          org_id?: string | null
           timezone?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "sites_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       thresholds: {
         Row: {
@@ -650,11 +753,19 @@ export type Database = {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["app_role"]
       }
+      has_org_role: {
+        Args: { _org_id: string; _roles: string[]; _user_id: string }
+        Returns: boolean
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
           _user_id: string
         }
+        Returns: boolean
+      }
+      is_org_member: {
+        Args: { _org_id: string; _user_id: string }
         Returns: boolean
       }
       is_site_member: {
