@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { useSite } from './useSite';
-import { MetricType, METRICS } from '@/types/wastewater';
+import { ParameterKey, PARAMETERS, getDefaultThresholds } from '@/types/wastewater';
 import { toast } from 'sonner';
 
 interface Reading {
@@ -80,7 +80,7 @@ export function useReadings() {
   }, [user, site, fetchReadings, fetchThresholds]);
 
   const addReading = async (
-    metricId: MetricType,
+    metricId: ParameterKey,
     value: number,
     notes?: string,
     recordedAt?: Date
@@ -116,7 +116,7 @@ export function useReadings() {
   };
 
   const addMultipleReadings = async (
-    readingsData: { metricId: MetricType; value: number; notes?: string; attachmentUrl?: string }[],
+    readingsData: { metricId: ParameterKey; value: number; notes?: string; attachmentUrl?: string }[],
     recordedAt?: Date
   ) => {
     if (!site || !user) {
@@ -241,23 +241,26 @@ export function useReadings() {
   };
 
   // Get readings for a specific metric
-  const getMetricReadings = (metricId: MetricType) => {
+  const getMetricReadings = (metricId: ParameterKey) => {
     return readings.filter(r => r.metric_id === metricId);
   };
 
   // Get threshold for a specific metric
-  const getMetricThreshold = (metricId: MetricType): Threshold | null => {
+  const getMetricThreshold = (metricId: ParameterKey): Threshold | null => {
     const threshold = thresholds.find(t => t.metric_id === metricId);
     if (threshold) return threshold;
     
-    // Return default if not found
-    const metric = METRICS[metricId];
+    // Return default if not found - use new parameter system
+    const param = PARAMETERS[metricId];
+    if (!param) return null;
+    
+    const defaults = getDefaultThresholds(param);
     return {
       id: '',
       site_id: site?.id || '',
       metric_id: metricId,
-      min_value: metric.defaultMin,
-      max_value: metric.defaultMax,
+      min_value: defaults.min,
+      max_value: defaults.max,
       enabled: true,
     };
   };

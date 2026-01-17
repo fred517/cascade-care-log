@@ -1,9 +1,9 @@
 import { supabase } from '@/integrations/supabase/client';
-import { METRICS, MetricType } from '@/types/wastewater';
+import { PARAMETERS, ParameterKey, getSeverity } from '@/types/wastewater';
 import { toast } from 'sonner';
 
 interface TriggerAlertParams {
-  metricId: MetricType;
+  metricId: ParameterKey;
   value: number;
   thresholdMin?: number;
   thresholdMax?: number;
@@ -20,23 +20,11 @@ export function useAlertEmail() {
     siteName = 'Main Treatment Plant',
     playbook,
   }: TriggerAlertParams) => {
-    const metric = METRICS[metricId];
+    const param = PARAMETERS[metricId];
     
-    // Determine severity
-    let severity = 'warning';
-    if (thresholdMin !== undefined && value < thresholdMin) {
-      const deviation = thresholdMin - value;
-      const range = (thresholdMax ?? thresholdMin) - thresholdMin;
-      if (range > 0 && deviation > range * 0.5) {
-        severity = 'critical';
-      }
-    } else if (thresholdMax !== undefined && value > thresholdMax) {
-      const deviation = value - thresholdMax;
-      const range = thresholdMax - (thresholdMin ?? thresholdMax);
-      if (range > 0 && deviation > range * 0.5) {
-        severity = 'critical';
-      }
-    }
+    // Use the new severity system
+    const severityLevel = getSeverity(value, param);
+    const severity = severityLevel === 'alarm' ? 'critical' : severityLevel === 'watch' ? 'warning' : 'info';
 
     try {
       // Create alert event in database
@@ -44,7 +32,7 @@ export function useAlertEmail() {
         .from('alert_events')
         .insert({
           metric_id: metricId,
-          metric_name: metric.name,
+          metric_name: param.label,
           value,
           threshold_min: thresholdMin,
           threshold_max: thresholdMax,
@@ -60,16 +48,18 @@ export function useAlertEmail() {
       const { error: emailError } = await supabase.functions.invoke('send-alert-email', {
         body: {
           alertEventId: alertEvent.id,
-          metricName: metric.name,
+          metricName: param.label,
           metricId,
           value,
-          unit: metric.unit,
+          unit: param.unit,
           thresholdMin,
           thresholdMax,
           severity,
           siteName,
           triggeredAt: new Date().toISOString(),
           playbook,
+          // Include action steps from parameter definition
+          actionSteps: param.actions?.[severityLevel === 'alarm' ? 'alarm' : 'watch'] || [],
         },
       });
 
@@ -89,20 +79,26 @@ export function useAlertEmail() {
   };
 
   const checkThresholds = async (
-    metricId: MetricType,
+    metricId: ParameterKey,
     value: number,
     thresholdMin: number,
     thresholdMax: number,
     playbooks?: { condition: string; steps: string[] }[]
   ) => {
-    const isViolation = value < thresholdMin || value > thresholdMax;
+    const param = PARAMETERS[metricId];
+    const severityLevel = getSeverity(value, param);
     
-    if (!isViolation) return null;
+    // Only trigger if watch or alarm
+    if (severityLevel === 'ok') return null;
 
     const condition = value < thresholdMin ? 'low' : 'high';
+    
+    // Use playbooks from props or fall back to parameter actions
     const matchingPlaybook = playbooks?.find(p => p.condition === condition);
-    const playbookHtml = matchingPlaybook
-      ? `<ul>${matchingPlaybook.steps.map(s => `<li>${s}</li>`).join('')}</ul>`
+    const actionSteps = matchingPlaybook?.steps || param.actions?.[severityLevel] || [];
+    
+    const playbookHtml = actionSteps.length > 0
+      ? `<ul>${actionSteps.map(s => `<li>${s}</li>`).join('')}</ul>`
       : undefined;
 
     return triggerAlert({
