@@ -1,17 +1,17 @@
 import { useState, useRef, useEffect } from 'react';
-import { MapPin, AlertTriangle, Wind, History, Factory, Plus } from 'lucide-react';
+import { MapPin, AlertTriangle, Wind, History, Factory, Layers } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { SiteMap, OdourIncident } from '@/types/odour';
 import DispersionPlume, { PlumeInfoPanel, PlumeLegend } from './DispersionPlume';
 import PlumePlayback, { usePlumePlayback } from './PlumePlayback';
 import { useLatestWeatherSnapshot, useWeatherSnapshots } from '@/hooks/useWeatherSnapshots';
 import { useOdourSources, useCreateOdourSource, type OdourSource } from '@/hooks/useOdourSources';
+import { useCurrentPredictions, type OdourPrediction } from '@/hooks/useOdourPredictions';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-
 interface InteractiveSiteMapProps {
   siteMap: SiteMap;
   incidents: OdourIncident[];
@@ -25,7 +25,9 @@ type ClickMode = 'incident' | 'source';
 export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onIncidentClick }: InteractiveSiteMapProps) {
   const [hoveredIncident, setHoveredIncident] = useState<string | null>(null);
   const [hoveredSource, setHoveredSource] = useState<string | null>(null);
+  const [hoveredPrediction, setHoveredPrediction] = useState<string | null>(null);
   const [showPlumes, setShowPlumes] = useState(true);
+  const [showPredictions, setShowPredictions] = useState(true);
   const [plumeMode, setPlumeMode] = useState<PlumeMode>('live');
   const [clickMode, setClickMode] = useState<ClickMode>('incident');
   const [containerWidth, setContainerWidth] = useState(800);
@@ -34,6 +36,7 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
   const { data: latestSnapshot, isLoading: latestLoading } = useLatestWeatherSnapshot();
   const { data: historicalSnapshots = [], isLoading: historyLoading } = useWeatherSnapshots(48);
   const { data: odourSources = [] } = useOdourSources();
+  const { data: predictions = [] } = useCurrentPredictions();
   const createSource = useCreateOdourSource();
   
   const {
@@ -141,6 +144,18 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
             </Label>
           </div>
           
+          <div className="flex items-center gap-2">
+            <Switch
+              id="show-predictions"
+              checked={showPredictions}
+              onCheckedChange={setShowPredictions}
+            />
+            <Label htmlFor="show-predictions" className="text-sm flex items-center gap-1.5 cursor-pointer">
+              <Layers className="w-4 h-4" />
+              Predicted Plumes
+            </Label>
+          </div>
+          
           {showPlumes && hasHistoricalData && (
             <Tabs value={plumeMode} onValueChange={(v) => setPlumeMode(v as PlumeMode)}>
               <TabsList className="h-8">
@@ -205,6 +220,77 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
           className="w-full h-auto"
           draggable={false}
         />
+        
+        {/* Predicted plume polygons from odour_predictions */}
+        {showPredictions && predictions.length > 0 && (
+          <svg 
+            className="absolute inset-0 w-full h-full pointer-events-none z-[1]"
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+          >
+            {predictions.map((prediction) => {
+              if (!prediction.geometry?.coordinates?.length) return null;
+              
+              const points = prediction.geometry.coordinates
+                .map(c => `${c.x},${c.y}`)
+                .join(' ');
+              
+              const intensity = prediction.peak_intensity || 3;
+              const opacity = Math.min(0.15 + (intensity * 0.08), 0.6);
+              
+              return (
+                <polygon
+                  key={`pred-${prediction.id}`}
+                  points={points}
+                  fill="hsl(var(--chart-3))"
+                  fillOpacity={opacity}
+                  stroke="hsl(var(--chart-3))"
+                  strokeWidth="0.3"
+                  strokeOpacity={0.8}
+                  className="pointer-events-auto cursor-pointer transition-opacity hover:fill-opacity-[0.5]"
+                  onMouseEnter={() => setHoveredPrediction(prediction.id)}
+                  onMouseLeave={() => setHoveredPrediction(null)}
+                />
+              );
+            })}
+          </svg>
+        )}
+        
+        {/* Prediction hover info */}
+        {hoveredPrediction && predictions.find(p => p.id === hoveredPrediction) && (() => {
+          const pred = predictions.find(p => p.id === hoveredPrediction)!;
+          const centroid = pred.geometry.coordinates?.length
+            ? {
+                x: pred.geometry.coordinates.reduce((s, c) => s + c.x, 0) / pred.geometry.coordinates.length,
+                y: pred.geometry.coordinates.reduce((s, c) => s + c.y, 0) / pred.geometry.coordinates.length,
+              }
+            : { x: 50, y: 50 };
+          
+          return (
+            <div
+              className="absolute z-20 bg-popover text-popover-foreground rounded-lg p-2 shadow-lg text-xs pointer-events-none"
+              style={{
+                left: `${centroid.x}%`,
+                top: `${centroid.y}%`,
+                transform: 'translate(-50%, -100%)',
+              }}
+            >
+              <p className="font-semibold">Predicted Plume</p>
+              <p className="text-muted-foreground">
+                Intensity: {pred.peak_intensity || 'N/A'}
+              </p>
+              {pred.valid_from && (
+                <p className="text-muted-foreground">
+                  Valid: {new Date(pred.valid_from).toLocaleTimeString()}
+                  {pred.valid_to && ` - ${new Date(pred.valid_to).toLocaleTimeString()}`}
+                </p>
+              )}
+              {pred.model_version && (
+                <p className="text-muted-foreground text-[10px]">Model: {pred.model_version}</p>
+              )}
+            </div>
+          );
+        })()}
         
         {/* Dispersion plumes from defined odour sources */}
         {showPlumes && hasWeatherData && odourSources.map((source) => {
@@ -339,6 +425,12 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
           </div>
           <span>Odour source</span>
         </div>
+        {showPredictions && predictions.length > 0 && (
+          <div className="flex items-center gap-1.5">
+            <div className="w-4 h-3 rounded bg-chart-3/40 border border-chart-3" />
+            <span>Predicted plume ({predictions.length})</span>
+          </div>
+        )}
         <div className="flex items-center gap-1.5">
           <div className="w-3 h-3 rounded-full bg-red-500" />
           <span>High intensity incident</span>
