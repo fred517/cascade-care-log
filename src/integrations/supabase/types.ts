@@ -316,125 +316,128 @@ export type Database = {
         }
         Relationships: []
       }
+      facilities: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          org_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          org_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          org_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "facilities_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      facility_sitemaps: {
+        Row: {
+          created_at: string
+          facility_id: string
+          file_mime: string | null
+          file_name: string | null
+          file_size: number | null
+          id: string
+          storage_path: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          facility_id: string
+          file_mime?: string | null
+          file_name?: string | null
+          file_size?: number | null
+          id?: string
+          storage_path: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          facility_id?: string
+          file_mime?: string | null
+          file_name?: string | null
+          file_size?: number | null
+          id?: string
+          storage_path?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "facility_sitemaps_facility_id_fkey"
+            columns: ["facility_id"]
+            isOneToOne: false
+            referencedRelation: "facilities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       odour_incidents: {
         Row: {
-          click_x: number
-          click_y: number
-          corrective_actions: string | null
           created_at: string
-          created_by: string
-          duration: number | null
-          follow_up_date: string | null
-          follow_up_notes: string | null
-          frequency: number | null
+          created_by: string | null
+          description: string | null
+          facility_id: string
           humidity: number | null
           id: string
-          incident_at: string
           intensity: number | null
-          latitude: number | null
-          location_impact: string | null
-          longitude: number | null
-          notes: string | null
-          odour_type: string | null
-          offensiveness: number | null
-          pressure: number | null
-          resolved_at: string | null
-          resolved_by: string | null
-          site_id: string
-          site_map_id: string | null
-          source_suspected: string | null
-          status: string | null
+          lat: number
+          lng: number
+          occurred_at: string
           temperature: number | null
-          updated_at: string
-          weather_description: string | null
-          weather_fetched_at: string | null
-          wind_direction: number | null
-          wind_direction_text: string | null
+          wind_dir: number | null
           wind_speed: number | null
         }
         Insert: {
-          click_x: number
-          click_y: number
-          corrective_actions?: string | null
           created_at?: string
-          created_by: string
-          duration?: number | null
-          follow_up_date?: string | null
-          follow_up_notes?: string | null
-          frequency?: number | null
+          created_by?: string | null
+          description?: string | null
+          facility_id: string
           humidity?: number | null
           id?: string
-          incident_at?: string
           intensity?: number | null
-          latitude?: number | null
-          location_impact?: string | null
-          longitude?: number | null
-          notes?: string | null
-          odour_type?: string | null
-          offensiveness?: number | null
-          pressure?: number | null
-          resolved_at?: string | null
-          resolved_by?: string | null
-          site_id: string
-          site_map_id?: string | null
-          source_suspected?: string | null
-          status?: string | null
+          lat: number
+          lng: number
+          occurred_at?: string
           temperature?: number | null
-          updated_at?: string
-          weather_description?: string | null
-          weather_fetched_at?: string | null
-          wind_direction?: number | null
-          wind_direction_text?: string | null
+          wind_dir?: number | null
           wind_speed?: number | null
         }
         Update: {
-          click_x?: number
-          click_y?: number
-          corrective_actions?: string | null
           created_at?: string
-          created_by?: string
-          duration?: number | null
-          follow_up_date?: string | null
-          follow_up_notes?: string | null
-          frequency?: number | null
+          created_by?: string | null
+          description?: string | null
+          facility_id?: string
           humidity?: number | null
           id?: string
-          incident_at?: string
           intensity?: number | null
-          latitude?: number | null
-          location_impact?: string | null
-          longitude?: number | null
-          notes?: string | null
-          odour_type?: string | null
-          offensiveness?: number | null
-          pressure?: number | null
-          resolved_at?: string | null
-          resolved_by?: string | null
-          site_id?: string
-          site_map_id?: string | null
-          source_suspected?: string | null
-          status?: string | null
+          lat?: number
+          lng?: number
+          occurred_at?: string
           temperature?: number | null
-          updated_at?: string
-          weather_description?: string | null
-          weather_fetched_at?: string | null
-          wind_direction?: number | null
-          wind_direction_text?: string | null
+          wind_dir?: number | null
           wind_speed?: number | null
         }
         Relationships: [
           {
-            foreignKeyName: "odour_incidents_site_id_fkey"
-            columns: ["site_id"]
+            foreignKeyName: "odour_incidents_facility_id_fkey"
+            columns: ["facility_id"]
             isOneToOne: false
-            referencedRelation: "sites"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "odour_incidents_site_map_id_fkey"
-            columns: ["site_map_id"]
-            isOneToOne: false
-            referencedRelation: "site_maps"
+            referencedRelation: "facilities"
             referencedColumns: ["id"]
           },
         ]
