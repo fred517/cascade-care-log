@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
-import { MapPin, AlertTriangle, Wind } from 'lucide-react';
+import { MapPin, AlertTriangle, Wind, History } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { SiteMap, OdourIncident } from '@/types/odour';
 import DispersionPlume, { PlumeInfoPanel, PlumeLegend } from './DispersionPlume';
-import { useLatestWeatherSnapshot } from '@/hooks/useWeatherSnapshots';
+import PlumePlayback, { usePlumePlayback } from './PlumePlayback';
+import { useLatestWeatherSnapshot, useWeatherSnapshots } from '@/hooks/useWeatherSnapshots';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 interface InteractiveSiteMapProps {
   siteMap: SiteMap;
@@ -14,13 +16,28 @@ interface InteractiveSiteMapProps {
   onIncidentClick?: (incident: OdourIncident) => void;
 }
 
+type PlumeMode = 'live' | 'history';
+
 export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onIncidentClick }: InteractiveSiteMapProps) {
   const [hoveredIncident, setHoveredIncident] = useState<string | null>(null);
   const [showPlumes, setShowPlumes] = useState(true);
+  const [plumeMode, setPlumeMode] = useState<PlumeMode>('live');
   const [containerWidth, setContainerWidth] = useState(800);
   const imageRef = useRef<HTMLDivElement>(null);
   
-  const { data: weatherSnapshot, isLoading: weatherLoading } = useLatestWeatherSnapshot();
+  const { data: latestSnapshot, isLoading: latestLoading } = useLatestWeatherSnapshot();
+  const { data: historicalSnapshots = [], isLoading: historyLoading } = useWeatherSnapshots(48); // Last 48 hours
+  
+  const {
+    currentIndex,
+    setCurrentIndex,
+    isPlaying,
+    setIsPlaying,
+    currentSnapshot: playbackSnapshot,
+  } = usePlumePlayback(historicalSnapshots);
+
+  // Choose which snapshot to use based on mode
+  const activeSnapshot = plumeMode === 'live' ? latestSnapshot : playbackSnapshot;
 
   // Track container size for plume scaling
   useEffect(() => {
@@ -35,6 +52,13 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
     observer.observe(imageRef.current);
     return () => observer.disconnect();
   }, []);
+
+  // Stop playback when switching to live mode
+  useEffect(() => {
+    if (plumeMode === 'live') {
+      setIsPlaying(false);
+    }
+  }, [plumeMode, setIsPlaying]);
 
   const handleClick = (e: React.MouseEvent) => {
     if (!imageRef.current) return;
@@ -67,16 +91,18 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
   });
 
   // Check if we have valid weather data for plumes
-  const hasWeatherData = weatherSnapshot && 
-    weatherSnapshot.wind_speed_mps !== null && 
-    weatherSnapshot.wind_direction_deg !== null &&
-    weatherSnapshot.stability_class;
+  const hasWeatherData = activeSnapshot && 
+    activeSnapshot.wind_speed_mps !== null && 
+    activeSnapshot.wind_direction_deg !== null &&
+    activeSnapshot.stability_class;
+
+  const hasHistoricalData = historicalSnapshots.length > 1;
 
   return (
-    <div className="relative">
-      {/* Plume toggle control */}
-      {hasWeatherData && (
-        <div className="mb-3 flex items-center justify-between">
+    <div className="relative space-y-3">
+      {/* Plume controls */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
             <Switch
               id="show-plumes"
@@ -85,13 +111,40 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
             />
             <Label htmlFor="show-plumes" className="text-sm flex items-center gap-1.5 cursor-pointer">
               <Wind className="w-4 h-4" />
-              Show Dispersion Plumes
+              Dispersion Plumes
             </Label>
           </div>
-          {weatherLoading && (
-            <span className="text-xs text-muted-foreground">Loading weather...</span>
+          
+          {showPlumes && hasHistoricalData && (
+            <Tabs value={plumeMode} onValueChange={(v) => setPlumeMode(v as PlumeMode)}>
+              <TabsList className="h-8">
+                <TabsTrigger value="live" className="text-xs h-6 px-2">
+                  <Wind className="w-3 h-3 mr-1" />
+                  Live
+                </TabsTrigger>
+                <TabsTrigger value="history" className="text-xs h-6 px-2">
+                  <History className="w-3 h-3 mr-1" />
+                  History
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
           )}
         </div>
+        
+        {(latestLoading || historyLoading) && (
+          <span className="text-xs text-muted-foreground">Loading weather data...</span>
+        )}
+      </div>
+
+      {/* Playback controls when in history mode */}
+      {showPlumes && plumeMode === 'history' && (
+        <PlumePlayback
+          snapshots={historicalSnapshots}
+          currentIndex={currentIndex}
+          onIndexChange={setCurrentIndex}
+          isPlaying={isPlaying}
+          onPlayingChange={setIsPlaying}
+        />
       )}
 
       <div
@@ -109,12 +162,12 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
         {/* Dispersion plumes for active incidents */}
         {showPlumes && hasWeatherData && visibleIncidents.map((incident) => (
           <DispersionPlume
-            key={`plume-${incident.id}`}
+            key={`plume-${incident.id}-${activeSnapshot.id}`}
             sourceX={incident.click_x}
             sourceY={incident.click_y}
-            windDirection={weatherSnapshot.wind_direction_deg!}
-            windSpeed={weatherSnapshot.wind_speed_mps!}
-            stabilityClass={weatherSnapshot.stability_class!}
+            windDirection={activeSnapshot.wind_direction_deg!}
+            windSpeed={activeSnapshot.wind_speed_mps!}
+            stabilityClass={activeSnapshot.stability_class!}
             intensity={incident.intensity || 3}
             containerWidth={containerWidth}
           />
@@ -162,13 +215,13 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
           </div>
         ))}
         
-        {/* Weather info panel */}
-        {showPlumes && hasWeatherData && (
+        {/* Weather info panel - only in live mode */}
+        {showPlumes && plumeMode === 'live' && hasWeatherData && (
           <PlumeInfoPanel
-            windSpeed={weatherSnapshot.wind_speed_mps!}
-            windDirection={weatherSnapshot.wind_direction_deg!}
-            stabilityClass={weatherSnapshot.stability_class!}
-            temperature={weatherSnapshot.temperature_c}
+            windSpeed={activeSnapshot.wind_speed_mps!}
+            windDirection={activeSnapshot.wind_direction_deg!}
+            stabilityClass={activeSnapshot.stability_class!}
+            temperature={activeSnapshot.temperature_c}
           />
         )}
         
@@ -182,7 +235,7 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
       </div>
 
       {/* Legend */}
-      <div className="mt-3 flex flex-wrap gap-4 text-xs">
+      <div className="flex flex-wrap gap-4 text-xs">
         <div className="flex items-center gap-1.5">
           <div className="w-3 h-3 rounded-full bg-red-500" />
           <span>High intensity</span>
