@@ -161,8 +161,8 @@ export default function Auth() {
           {/* Stats */}
           <div className="mt-16 flex flex-wrap items-center justify-center gap-8 md:gap-16">
             <div className="text-center">
-              <p className="text-4xl md:text-5xl font-bold text-white">6</p>
-              <p className="text-sm text-white/60 mt-1">Key Metrics</p>
+              <p className="text-4xl md:text-5xl font-bold text-white">16+</p>
+              <p className="text-sm text-white/60 mt-1">Customizable Metrics</p>
             </div>
             <div className="w-px h-12 bg-white/20 hidden md:block" />
             <div className="text-center">
