@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
-import { MapPin, AlertTriangle, Wind, Factory, PlusCircle, X } from 'lucide-react';
+import { MapPin, AlertTriangle, Wind, Factory, PlusCircle, X, Navigation } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { SiteMap, OdourIncident } from '@/types/odour';
 import DispersionPlume, { PlumeInfoPanel, PlumeLegend } from './DispersionPlume';
 import { useLatestWeatherSnapshot } from '@/hooks/useWeatherSnapshots';
 import { useOdourSources, useCreateOdourSource, type OdourSource } from '@/hooks/useOdourSources';
+import { useGeolocation } from '@/hooks/useGeolocation';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -30,6 +31,7 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
   const { data: latestSnapshot, isLoading: latestLoading } = useLatestWeatherSnapshot();
   const { data: odourSources = [] } = useOdourSources();
   const createSource = useCreateOdourSource();
+  const geo = useGeolocation();
 
   useEffect(() => {
     if (!imageRef.current) return;
@@ -102,6 +104,21 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
     latestSnapshot.wind_speed_mps !== null && 
     latestSnapshot.wind_direction_deg !== null &&
     latestSnapshot.stability_class;
+
+  // Convert GPS coords to map position (simplified - uses hash for demo)
+  // In production, you'd use proper geo bounds from the siteMap
+  const getGpsPosition = (): { x: number; y: number } | null => {
+    if (geo.status !== 'granted') return null;
+    // Simplified positioning - in production use actual geo bounds
+    const lat = geo.coords.lat;
+    const lng = geo.coords.lng;
+    // Use modulo to place within map bounds (demo approach)
+    const x = 20 + ((Math.abs(lng) * 1000) % 60);
+    const y = 20 + ((Math.abs(lat) * 1000) % 60);
+    return { x, y };
+  };
+
+  const gpsPosition = getGpsPosition();
 
   // Get source position for rendering
   const getSourcePosition = (source: OdourSource): { x: number; y: number } | null => {
@@ -324,6 +341,33 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
             </div>
           );
         })}
+
+        {/* GPS Location marker */}
+        {gpsPosition && (
+          <div
+            className="absolute transform -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none"
+            style={{
+              left: `${gpsPosition.x}%`,
+              top: `${gpsPosition.y}%`,
+            }}
+          >
+            {/* Accuracy ring */}
+            <div 
+              className="absolute rounded-full bg-blue-500/20 border border-blue-500/40 animate-pulse"
+              style={{
+                width: `${Math.min(80, (geo.coords?.accuracy ?? 10) / 2)}px`,
+                height: `${Math.min(80, (geo.coords?.accuracy ?? 10) / 2)}px`,
+                transform: 'translate(-50%, -50%)',
+                left: '50%',
+                top: '50%',
+              }}
+            />
+            {/* Center dot */}
+            <div className="w-4 h-4 rounded-full bg-blue-500 border-2 border-white shadow-lg flex items-center justify-center">
+              <Navigation className="w-2.5 h-2.5 text-white" />
+            </div>
+          </div>
+        )}
         
         {/* Weather info panel */}
         {showPlumes && hasWeatherData && (
@@ -355,6 +399,10 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
         <div className="flex items-center gap-1.5">
           <div className="w-3 h-3 rounded-full bg-orange-500" />
           <span>Low</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 rounded-full bg-blue-500 border border-white" />
+          <span>Your location</span>
         </div>
       </div>
       
