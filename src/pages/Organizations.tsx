@@ -711,15 +711,16 @@ export default function Organizations() {
 
         {/* Site Assignment Dialog for User Approval */}
         <Dialog open={approvalDialogOpen} onOpenChange={setApprovalDialogOpen}>
-          <DialogContent>
+          <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle>Approve User</DialogTitle>
               <DialogDescription>
-                Assign {selectedPendingUser?.first_name || selectedPendingUser?.display_name || selectedPendingUser?.email} to a site before approving.
+                Review the details and approve this user's access request.
               </DialogDescription>
             </DialogHeader>
             
             <div className="py-4 space-y-4">
+              {/* User Details */}
               <div className="space-y-2">
                 <Label>User Details</Label>
                 <div className="p-3 rounded-lg bg-muted text-sm">
@@ -729,35 +730,52 @@ export default function Organizations() {
                       : selectedPendingUser?.display_name || 'No name'}
                   </p>
                   <p className="text-muted-foreground">{selectedPendingUser?.email}</p>
-                  {selectedPendingUser?.facility_name && (
-                    <p className="text-muted-foreground mt-1">
-                      Requested facility: {selectedPendingUser.facility_name}
-                    </p>
+                  {selectedPendingUser?.phone_number && (
+                    <p className="text-muted-foreground">{selectedPendingUser.phone_number}</p>
                   )}
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="site-select">Assign to Site</Label>
-                <Select value={selectedSiteId} onValueChange={setSelectedSiteId}>
-                  <SelectTrigger id="site-select">
-                    <SelectValue placeholder="Select a site..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {sites.map((site) => (
-                      <SelectItem key={site.id} value={site.id}>
-                        <div className="flex items-center gap-2">
-                          <Building2 className="w-4 h-4 text-muted-foreground" />
-                          {site.name}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  The user will be added as an operator to this site.
-                </p>
-              </div>
+              {/* Organization to be created - Prominent display */}
+              {selectedPendingUser?.facility_name ? (
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <Building2 className="w-4 h-4 text-primary" />
+                    Organization to be Created
+                  </Label>
+                  <div className="p-4 rounded-lg bg-primary/10 border border-primary/20">
+                    <p className="font-semibold text-lg text-foreground">
+                      {selectedPendingUser.facility_name}
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      A new organization and site will be automatically created with this name. 
+                      The user will be added as the <span className="font-medium text-foreground">owner</span>.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Label htmlFor="site-select">Assign to Existing Site</Label>
+                  <Select value={selectedSiteId} onValueChange={setSelectedSiteId}>
+                    <SelectTrigger id="site-select">
+                      <SelectValue placeholder="Select a site..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {sites.map((site) => (
+                        <SelectItem key={site.id} value={site.id}>
+                          <div className="flex items-center gap-2">
+                            <Building2 className="w-4 h-4 text-muted-foreground" />
+                            {site.name}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    No facility name provided. Select an existing site to assign this user.
+                  </p>
+                </div>
+              )}
             </div>
 
             <DialogFooter>
@@ -766,7 +784,7 @@ export default function Organizations() {
               </Button>
               <Button 
                 onClick={handleApproveUser}
-                disabled={!selectedSiteId || approvingUser}
+                disabled={(!selectedPendingUser?.facility_name && !selectedSiteId) || approvingUser}
                 className="bg-green-600 hover:bg-green-700"
               >
                 {approvingUser ? (
@@ -774,7 +792,10 @@ export default function Organizations() {
                 ) : (
                   <Check className="w-4 h-4 mr-2" />
                 )}
-                Approve & Send Welcome Email
+                {selectedPendingUser?.facility_name 
+                  ? 'Approve & Create Organization'
+                  : 'Approve & Send Welcome Email'
+                }
               </Button>
             </DialogFooter>
           </DialogContent>
