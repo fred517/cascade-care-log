@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Navigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
-import { Droplets, Mail, Lock, User, Loader2, ArrowRight, X, ArrowLeft } from 'lucide-react';
+import { Droplets, Mail, Lock, User, Loader2, ArrowRight, X, ArrowLeft, Building2, Phone } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import heroBackground from '@/assets/hero-background.png';
@@ -16,7 +16,10 @@ export default function Auth() {
   const [authMode, setAuthMode] = useState<AuthMode>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [displayName, setDisplayName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [surname, setSurname] = useState('');
+  const [facilityName, setFacilityName] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Handle query params for prefilled email and mode
@@ -67,15 +70,23 @@ export default function Auth() {
           setAuthMode('signin');
         }
       } else if (authMode === 'signup') {
-        const { error } = await signUp(email, password, displayName);
+        const { error } = await signUp(email, password, {
+          firstName,
+          surname,
+          facilityName,
+          phoneNumber,
+        });
         if (error) {
           toast.error(error.message);
         } else {
-          toast.success('Account created! Please wait for admin approval before you can access the app.');
+          toast.success('Account request submitted! You will receive an email once approved.');
           setShowAuthModal(false);
           setEmail('');
           setPassword('');
-          setDisplayName('');
+          setFirstName('');
+          setSurname('');
+          setFacilityName('');
+          setPhoneNumber('');
         }
       } else {
         const { error } = await signIn(email, password);
@@ -238,22 +249,71 @@ export default function Auth() {
 
               <form onSubmit={handleSubmit} className="space-y-4">
                 {authMode === 'signup' && (
-                  <div>
-                    <label className="block text-sm font-medium text-foreground mb-2">
-                      Display Name
-                    </label>
-                    <div className="relative">
-                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                      <input
-                        type="text"
-                        value={displayName}
-                        onChange={(e) => setDisplayName(e.target.value)}
-                        placeholder="John Operator"
-                        className="input-field pl-11"
-                        required
-                      />
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-foreground mb-2">
+                          First Name
+                        </label>
+                        <div className="relative">
+                          <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                          <input
+                            type="text"
+                            value={firstName}
+                            onChange={(e) => setFirstName(e.target.value)}
+                            placeholder="John"
+                            className="input-field pl-11"
+                            required
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-foreground mb-2">
+                          Surname
+                        </label>
+                        <input
+                          type="text"
+                          value={surname}
+                          onChange={(e) => setSurname(e.target.value)}
+                          placeholder="Smith"
+                          className="input-field"
+                          required
+                        />
+                      </div>
                     </div>
-                  </div>
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-2">
+                        Facility Name
+                      </label>
+                      <div className="relative">
+                        <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                        <input
+                          type="text"
+                          value={facilityName}
+                          onChange={(e) => setFacilityName(e.target.value)}
+                          placeholder="Water Treatment Plant XYZ"
+                          className="input-field pl-11"
+                          required
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-2">
+                        Phone Number
+                      </label>
+                      <div className="relative">
+                        <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                        <input
+                          type="tel"
+                          value={phoneNumber}
+                          onChange={(e) => setPhoneNumber(e.target.value)}
+                          placeholder="+61 4XX XXX XXX"
+                          className="input-field pl-11"
+                          required
+                        />
+                      </div>
+                    </div>
+                  </>
                 )}
 
                 <div>

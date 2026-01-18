@@ -14,7 +14,10 @@ const corsHeaders = {
 interface SignupNotificationRequest {
   userId: string;
   email: string;
-  displayName?: string;
+  firstName: string;
+  surname: string;
+  facilityName: string;
+  phoneNumber: string;
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -26,11 +29,12 @@ const handler = async (req: Request): Promise<Response> => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    const { userId, email, displayName }: SignupNotificationRequest = await req.json();
+    const { userId, email, firstName, surname, facilityName, phoneNumber }: SignupNotificationRequest = await req.json();
 
     console.log(`New signup notification for: ${email} (${userId})`);
 
-    const approvalUrl = `${supabaseUrl.replace('.supabase.co', '.lovableproject.com')}/settings`;
+    // Use the production URL for approval link
+    const approvalUrl = "https://waterops.lovable.app/settings";
 
     const html = `
       <!DOCTYPE html>
@@ -44,25 +48,29 @@ const handler = async (req: Request): Promise<Response> => {
           .user-box { background: white; padding: 20px; border-radius: 8px; margin: 16px 0; border-left: 4px solid #3b82f6; }
           .footer { padding: 20px; text-align: center; color: #64748b; font-size: 12px; }
           .btn { display: inline-block; background: #3b82f6; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; }
+          .field { margin: 0 0 12px 0; }
+          .label { font-weight: 600; color: #475569; }
         </style>
       </head>
       <body>
         <div class="container">
           <div class="header">
-            <h1 style="margin: 0; font-size: 24px;">🆕 New User Registration</h1>
+            <h1 style="margin: 0; font-size: 24px;">🆕 New Account Request</h1>
             <p style="margin: 8px 0 0 0; opacity: 0.9;">Approval Required</p>
           </div>
           <div class="content">
-            <p>Hello Admin,</p>
-            <p>A new user has registered and is waiting for approval:</p>
+            <p>Hello Fred,</p>
+            <p>A new user has requested access to WaterOps:</p>
             
             <div class="user-box">
-              <p style="margin: 0 0 8px 0;"><strong>Email:</strong> ${email}</p>
-              <p style="margin: 0 0 8px 0;"><strong>Display Name:</strong> ${displayName || 'Not provided'}</p>
-              <p style="margin: 0;"><strong>User ID:</strong> <code style="background: #e2e8f0; padding: 2px 6px; border-radius: 4px; font-size: 12px;">${userId}</code></p>
+              <p class="field"><span class="label">Name:</span> ${firstName} ${surname}</p>
+              <p class="field"><span class="label">Email:</span> ${email}</p>
+              <p class="field"><span class="label">Facility:</span> ${facilityName}</p>
+              <p class="field"><span class="label">Phone:</span> ${phoneNumber}</p>
+              <p class="field" style="margin-bottom: 0;"><span class="label">User ID:</span> <code style="background: #e2e8f0; padding: 2px 6px; border-radius: 4px; font-size: 12px;">${userId}</code></p>
             </div>
 
-            <p>This user will not be able to access the application until you approve their account.</p>
+            <p>This user will not be able to access the application until you approve their account. Once approved, they will receive a welcome email with instructions to set their password.</p>
             
             <p style="text-align: center; margin-top: 24px;">
               <a href="${approvalUrl}" class="btn">Review & Approve User</a>
@@ -79,7 +87,7 @@ const handler = async (req: Request): Promise<Response> => {
     const emailResponse = await resend.emails.send({
       from: "WaterOps <onboarding@resend.dev>",
       to: [ADMIN_EMAIL],
-      subject: `🆕 New User Awaiting Approval: ${email}`,
+      subject: `🆕 New Account Request: ${firstName} ${surname} - ${facilityName}`,
       html,
     });
 
@@ -89,8 +97,8 @@ const handler = async (req: Request): Promise<Response> => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     await supabase.from("email_logs").insert({
       recipient_email: ADMIN_EMAIL,
-      recipient_name: "Admin",
-      subject: `New User Awaiting Approval: ${email}`,
+      recipient_name: "Fred",
+      subject: `New Account Request: ${firstName} ${surname} - ${facilityName}`,
       body: html,
       status: "sent",
       provider_id: emailResponse.data?.id,
