@@ -25,6 +25,10 @@ interface PendingUser {
   user_id: string;
   email: string | null;
   display_name: string | null;
+  first_name: string | null;
+  surname: string | null;
+  facility_name: string | null;
+  phone_number: string | null;
   created_at: string;
   is_approved: boolean;
 }
@@ -38,7 +42,7 @@ export default function UserApproval() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, user_id, email, display_name, created_at, is_approved')
+        .select('id, user_id, email, display_name, first_name, surname, facility_name, phone_number, created_at, is_approved')
         .eq('is_approved', false)
         .order('created_at', { ascending: false });
 
@@ -52,7 +56,7 @@ export default function UserApproval() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, user_id, email, display_name, created_at, is_approved')
+        .select('id, user_id, email, display_name, first_name, surname, facility_name, phone_number, created_at, is_approved')
         .eq('is_approved', true)
         .order('created_at', { ascending: false })
         .limit(10);
@@ -63,7 +67,8 @@ export default function UserApproval() {
   });
 
   const approveMutation = useMutation({
-    mutationFn: async (userId: string) => {
+    mutationFn: async (pendingUser: PendingUser) => {
+      // First, update the profile to approved
       const { error } = await supabase
         .from('profiles')
         .update({
@@ -71,14 +76,28 @@ export default function UserApproval() {
           approved_by: user?.id,
           approved_at: new Date().toISOString(),
         })
-        .eq('user_id', userId);
+        .eq('user_id', pendingUser.user_id);
 
       if (error) throw error;
+
+      // Then send welcome email with password setup link
+      const { error: emailError } = await supabase.functions.invoke('send-welcome-email', {
+        body: {
+          userId: pendingUser.user_id,
+          email: pendingUser.email,
+          firstName: pendingUser.first_name || pendingUser.display_name?.split(' ')[0] || '',
+        },
+      });
+
+      if (emailError) {
+        console.error('Failed to send welcome email:', emailError);
+        // Don't throw - user is already approved, just log the error
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['pending-users'] });
       queryClient.invalidateQueries({ queryKey: ['approved-users'] });
-      toast({ title: 'User Approved', description: 'The user can now access the application.' });
+      toast({ title: 'User Approved', description: 'Welcome email with password setup link has been sent.' });
     },
     onError: (error: any) => {
       toast({ title: 'Error', description: error.message, variant: 'destructive' });
@@ -146,52 +165,66 @@ export default function UserApproval() {
               {pendingUsers.map((pendingUser) => (
                 <div
                   key={pendingUser.id}
-                  className="flex items-center justify-between p-4 rounded-lg border border-border bg-card hover:bg-accent/5 transition-colors"
+                  className="p-4 rounded-lg border border-border bg-card hover:bg-accent/5 transition-colors"
                 >
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium text-foreground truncate">
-                      {pendingUser.display_name || 'No name provided'}
-                    </p>
-                    <p className="text-sm text-muted-foreground truncate">{pendingUser.email}</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Registered {format(new Date(pendingUser.created_at), 'MMM d, yyyy h:mm a')}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 ml-4">
-                    <Button
-                      size="sm"
-                      onClick={() => approveMutation.mutate(pendingUser.user_id)}
-                      disabled={approveMutation.isPending}
-                      className="bg-green-600 hover:bg-green-700"
-                    >
-                      <Check className="w-4 h-4 mr-1" />
-                      Approve
-                    </Button>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button size="sm" variant="destructive">
-                          <X className="w-4 h-4 mr-1" />
-                          Reject
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Reject User?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            This will remove {pendingUser.email} from the system. They will need to register again if they want access.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => rejectMutation.mutate(pendingUser.user_id)}
-                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                          >
-                            Reject User
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-foreground">
+                        {pendingUser.first_name && pendingUser.surname 
+                          ? `${pendingUser.first_name} ${pendingUser.surname}`
+                          : pendingUser.display_name || 'No name provided'}
+                      </p>
+                      <p className="text-sm text-muted-foreground">{pendingUser.email}</p>
+                      {pendingUser.facility_name && (
+                        <p className="text-sm text-muted-foreground mt-1">
+                          <span className="font-medium">Facility:</span> {pendingUser.facility_name}
+                        </p>
+                      )}
+                      {pendingUser.phone_number && (
+                        <p className="text-sm text-muted-foreground">
+                          <span className="font-medium">Phone:</span> {pendingUser.phone_number}
+                        </p>
+                      )}
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Registered {format(new Date(pendingUser.created_at), 'MMM d, yyyy h:mm a')}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <Button
+                        size="sm"
+                        onClick={() => approveMutation.mutate(pendingUser)}
+                        disabled={approveMutation.isPending}
+                        className="bg-green-600 hover:bg-green-700"
+                      >
+                        <Check className="w-4 h-4 mr-1" />
+                        Approve
+                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button size="sm" variant="destructive">
+                            <X className="w-4 h-4 mr-1" />
+                            Reject
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Reject User?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This will remove {pendingUser.email} from the system. They will need to register again if they want access.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => rejectMutation.mutate(pendingUser.user_id)}
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            >
+                              Reject User
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
                   </div>
                 </div>
               ))}

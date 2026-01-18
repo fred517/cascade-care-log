@@ -16,6 +16,13 @@ interface Profile {
   approved_at: string | null;
 }
 
+interface SignupData {
+  firstName: string;
+  surname: string;
+  facilityName: string;
+  phoneNumber: string;
+}
+
 interface AuthContextType {
   user: User | null;
   session: Session | null;
@@ -23,7 +30,7 @@ interface AuthContextType {
   role: AppRole | null;
   loading: boolean;
   isApproved: boolean;
-  signUp: (email: string, password: string, displayName?: string) => Promise<{ error: Error | null }>;
+  signUp: (email: string, password: string, data: SignupData) => Promise<{ error: Error | null }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   isAdmin: boolean;
@@ -101,28 +108,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const signUp = async (email: string, password: string, displayName?: string) => {
+  const signUp = async (email: string, password: string, data: SignupData) => {
     const redirectUrl = `${window.location.origin}/confirm-email`;
     
-    const { data, error } = await supabase.auth.signUp({
+    const { data: authData, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         emailRedirectTo: redirectUrl,
         data: {
-          display_name: displayName,
+          first_name: data.firstName,
+          surname: data.surname,
+          facility_name: data.facilityName,
+          phone_number: data.phoneNumber,
+          display_name: `${data.firstName} ${data.surname}`,
         },
       },
     });
 
     // Send notification to admin if signup was successful
-    if (!error && data.user) {
+    if (!error && authData.user) {
       try {
         await supabase.functions.invoke('send-signup-notification', {
           body: {
-            userId: data.user.id,
+            userId: authData.user.id,
             email: email,
-            displayName: displayName,
+            firstName: data.firstName,
+            surname: data.surname,
+            facilityName: data.facilityName,
+            phoneNumber: data.phoneNumber,
           },
         });
       } catch (notifyError) {
