@@ -225,11 +225,14 @@ const Index = () => {
                 <X className="w-5 h-5 text-muted-foreground" />
               </button>
             </div>
-            <MetricChart
-              metricId={selectedMetric}
-              readings={chartReadings}
-              threshold={chartThresholds.find(t => t.metricId === selectedMetric)}
-            />
+            <div className="h-64 sm:h-80 min-w-0 overflow-hidden">
+              <MetricChart
+                metricId={selectedMetric}
+                readings={chartReadings}
+                threshold={chartThresholds.find(t => t.metricId === selectedMetric)}
+                containerClassName="h-full"
+              />
+            </div>
           </div>
         )}
 
