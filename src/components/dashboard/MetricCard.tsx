@@ -55,48 +55,49 @@ export function MetricCard({ status, onClick }: MetricCardProps) {
       )}
     >
       {/* Header */}
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <span className="text-2xl">{PARAMETER_ICONS[status.metricId]}</span>
+      <div className="flex items-start justify-between mb-2 sm:mb-3">
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          <span className="text-lg sm:text-2xl">{PARAMETER_ICONS[status.metricId]}</span>
           <div>
-            <h3 className="font-semibold text-foreground">{param.label}</h3>
-            <p className="text-xs text-muted-foreground">{param.category}</p>
+            <h3 className="font-semibold text-foreground text-sm sm:text-base">{param.label}</h3>
+            <p className="text-[10px] sm:text-xs text-muted-foreground">{param.category}</p>
           </div>
         </div>
-        <div className={cn("status-indicator", statusIndicatorClass[status.status])} />
+        <div className={cn("status-indicator w-2 h-2 sm:w-3 sm:h-3", statusIndicatorClass[status.status])} />
       </div>
 
       {/* Value */}
-      <div className="flex items-baseline gap-2 mb-3">
-        <span className="text-3xl font-bold font-mono text-foreground">
+      <div className="flex items-baseline gap-1.5 sm:gap-2 mb-2 sm:mb-3">
+        <span className="text-2xl sm:text-3xl font-bold font-mono text-foreground">
           {formatValue(status.latestValue)}
         </span>
-        <span className="text-sm text-muted-foreground">{param.unit}</span>
+        <span className="text-xs sm:text-sm text-muted-foreground">{param.unit}</span>
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between text-xs">
+      <div className="flex items-center justify-between text-[10px] sm:text-xs">
         <div className="flex items-center gap-1 text-muted-foreground">
-          <Clock className="w-3 h-3" />
+          <Clock className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
           <span>{formatTime(status.lastUpdated)}</span>
         </div>
         
         {status.trend && status.status !== 'missing' && (
           <div className={cn(
-            "flex items-center gap-1 px-2 py-1 rounded-full",
+            "flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full",
             status.trend === 'rising' && "bg-status-warning/20 text-status-warning",
             status.trend === 'falling' && "bg-status-info/20 text-status-info",
             status.trend === 'stable' && "bg-muted text-muted-foreground"
           )}>
-            <TrendIcon className="w-3 h-3" />
+            <TrendIcon className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
             <span className="capitalize">{status.trend}</span>
           </div>
         )}
 
         {status.status === 'critical' && (
-          <div className="flex items-center gap-1 text-status-critical">
-            <AlertTriangle className="w-3 h-3" />
-            <span>Action Required</span>
+          <div className="flex items-center gap-0.5 sm:gap-1 text-status-critical">
+            <AlertTriangle className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+            <span className="hidden xs:inline">Action Required</span>
+            <span className="xs:hidden">Alert</span>
           </div>
         )}
       </div>
