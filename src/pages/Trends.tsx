@@ -85,7 +85,7 @@ export default function Trends() {
         </div>
 
         {/* Main Chart */}
-        <div className="bg-card rounded-xl border border-border p-6 mb-8">
+        <div className="bg-card rounded-xl border border-border p-4 sm:p-6 mb-8 min-w-0 overflow-hidden">
           <div className="mb-4">
             <div className="flex items-center gap-2">
               <span className="text-2xl">{PARAMETER_ICONS[selectedMetric]}</span>
@@ -101,7 +101,7 @@ export default function Trends() {
               {PARAMETERS[selectedMetric].unit && ` • Unit: ${PARAMETERS[selectedMetric].unit}`}
             </p>
           </div>
-          <div className="h-80">
+          <div className="h-64 sm:h-80 min-w-0">
             <MetricChart
               metricId={selectedMetric}
               readings={mockReadings}
