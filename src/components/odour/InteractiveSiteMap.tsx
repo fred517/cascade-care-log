@@ -164,7 +164,7 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
   };
 
   // Get GPS position on map
-  const gpsPosition = geo.status === 'granted' 
+  const gpsPosition = geo.permission === 'granted' && geo.coords
     ? geoToMapPosition(geo.coords.lat, geo.coords.lng)
     : null;
 
@@ -416,8 +416,8 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
             <div 
               className="absolute rounded-full bg-blue-500/20 border border-blue-500/40 animate-pulse"
               style={{
-                width: `${Math.min(80, (geo.coords?.accuracy ?? 10) / 2)}px`,
-                height: `${Math.min(80, (geo.coords?.accuracy ?? 10) / 2)}px`,
+                width: `${Math.min(80, (geo.coords?.accuracyMeters ?? 10) / 2)}px`,
+                height: `${Math.min(80, (geo.coords?.accuracyMeters ?? 10) / 2)}px`,
                 transform: 'translate(-50%, -50%)',
                 left: '50%',
                 top: '50%',
