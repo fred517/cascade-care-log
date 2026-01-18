@@ -1105,11 +1105,14 @@ export default function Reports() {
                       <h3 className="text-lg font-semibold text-foreground mb-4">
                         {METRICS[selectedMetric].name} Trend
                       </h3>
-                      <MetricChart
-                        metricId={selectedMetric}
-                        readings={chartReadings}
-                        threshold={chartThresholds.find(t => t.metricId === selectedMetric)}
-                      />
+                      <div className="h-64 sm:h-80 min-w-0 overflow-hidden">
+                        <MetricChart
+                          metricId={selectedMetric}
+                          readings={chartReadings}
+                          threshold={chartThresholds.find(t => t.metricId === selectedMetric)}
+                          containerClassName="h-full"
+                        />
+                      </div>
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
@@ -1122,11 +1125,14 @@ export default function Reports() {
                             <h3 className="text-lg font-semibold text-foreground mb-4">
                               {METRICS[metricId as MetricType].name}
                             </h3>
-                            <MetricChart
-                              metricId={metricId as MetricType}
-                              readings={chartReadings}
-                              threshold={chartThresholds.find(t => t.metricId === metricId)}
-                            />
+                            <div className="h-64 min-w-0 overflow-hidden">
+                              <MetricChart
+                                metricId={metricId as MetricType}
+                                readings={chartReadings}
+                                threshold={chartThresholds.find(t => t.metricId === metricId)}
+                                containerClassName="h-full"
+                              />
+                            </div>
                           </div>
                         );
                       })}
