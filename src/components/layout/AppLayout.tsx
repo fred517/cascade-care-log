@@ -15,8 +15,7 @@ import {
   User,
   Shield,
   FileText,
-  Building2,
-  Cloud
+  Building2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
@@ -27,7 +26,6 @@ interface AppLayoutProps {
 
 const navItems = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { path: '/environment', label: 'Environment', icon: Cloud },
   { path: '/readings', label: 'Add Reading', icon: PlusCircle },
   { path: '/trends', label: 'Trends', icon: TrendingUp },
   { path: '/reports', label: 'Reports', icon: FileText },

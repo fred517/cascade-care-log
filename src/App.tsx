@@ -17,7 +17,7 @@ import ResetPassword from "./pages/ResetPassword";
 import EmailConfirmation from "./pages/EmailConfirmation";
 import NotFound from "./pages/NotFound";
 import Organizations from "./pages/Organizations";
-import EnvironmentMonitor from "./pages/EnvironmentMonitor";
+
 
 const queryClient = new QueryClient();
 
@@ -94,14 +94,6 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <Organizations />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/environment"
-              element={
-                <ProtectedRoute>
-                  <EnvironmentMonitor />
                 </ProtectedRoute>
               }
             />
