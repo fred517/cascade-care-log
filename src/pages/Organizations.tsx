@@ -7,22 +7,54 @@ import {
   Building2, 
   Plus, 
   Users, 
-  Settings, 
   Loader2, 
   Crown, 
   Shield, 
   User, 
   Eye,
-  MoreVertical,
   Pencil,
   Trash2,
   UserPlus,
   Check,
   X,
-  ChevronDown
+  ChevronDown,
+  Clock,
+  UserCheck,
+  Mail
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { z } from 'zod';
+import { format } from 'date-fns';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
 
 type OrgRole = 'owner' | 'admin' | 'operator' | 'viewer';
 
@@ -43,6 +75,24 @@ interface OrgMember {
     display_name: string | null;
     email: string | null;
   };
+}
+
+interface PendingUser {
+  id: string;
+  user_id: string;
+  email: string | null;
+  display_name: string | null;
+  first_name: string | null;
+  surname: string | null;
+  facility_name: string | null;
+  phone_number: string | null;
+  created_at: string;
+  is_approved: boolean;
+}
+
+interface Site {
+  id: string;
+  name: string;
 }
 
 const ORG_ROLES: { value: OrgRole; label: string; icon: React.ReactNode; description: string }[] = [
@@ -83,6 +133,17 @@ export default function Organizations() {
   // Role dropdown state
   const [openRoleDropdown, setOpenRoleDropdown] = useState<string | null>(null);
   const [updatingRole, setUpdatingRole] = useState<string | null>(null);
+
+  // Pending user approval state
+  const [pendingUsers, setPendingUsers] = useState<PendingUser[]>([]);
+  const [loadingPending, setLoadingPending] = useState(true);
+  const [sites, setSites] = useState<Site[]>([]);
+  const [approvalDialogOpen, setApprovalDialogOpen] = useState(false);
+  const [selectedPendingUser, setSelectedPendingUser] = useState<PendingUser | null>(null);
+  const [selectedSiteId, setSelectedSiteId] = useState<string>('');
+  const [approvingUser, setApprovingUser] = useState(false);
+  const [resendingUserId, setResendingUserId] = useState<string | null>(null);
+  const [approvedUsers, setApprovedUsers] = useState<PendingUser[]>([]);
 
   const fetchOrganizations = useCallback(async () => {
     if (!user) return;
@@ -174,15 +235,160 @@ export default function Organizations() {
     }
   }, []);
 
+  const fetchPendingUsers = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, user_id, email, display_name, first_name, surname, facility_name, phone_number, created_at, is_approved')
+        .eq('is_approved', false)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setPendingUsers(data as PendingUser[]);
+    } catch (error: any) {
+      console.error('Error fetching pending users:', error);
+    } finally {
+      setLoadingPending(false);
+    }
+  }, []);
+
+  const fetchApprovedUsers = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, user_id, email, display_name, first_name, surname, facility_name, phone_number, created_at, is_approved')
+        .eq('is_approved', true)
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (error) throw error;
+      setApprovedUsers(data as PendingUser[]);
+    } catch (error: any) {
+      console.error('Error fetching approved users:', error);
+    }
+  }, []);
+
+  const fetchSites = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('sites')
+        .select('id, name')
+        .order('name');
+
+      if (error) throw error;
+      setSites(data as Site[]);
+    } catch (error: any) {
+      console.error('Error fetching sites:', error);
+    }
+  }, []);
+
   useEffect(() => {
     fetchOrganizations();
-  }, [fetchOrganizations]);
+    fetchPendingUsers();
+    fetchApprovedUsers();
+    fetchSites();
+  }, [fetchOrganizations, fetchPendingUsers, fetchApprovedUsers, fetchSites]);
 
   useEffect(() => {
     if (selectedOrg) {
       fetchOrgMembers(selectedOrg.id);
     }
   }, [selectedOrg, fetchOrgMembers]);
+
+  const openApprovalDialog = (pendingUser: PendingUser) => {
+    setSelectedPendingUser(pendingUser);
+    setSelectedSiteId('');
+    setApprovalDialogOpen(true);
+  };
+
+  const handleApproveUser = async () => {
+    if (!selectedPendingUser) return;
+
+    setApprovingUser(true);
+    try {
+      // Update the profile to approved
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          is_approved: true,
+          approved_by: user?.id,
+          approved_at: new Date().toISOString(),
+          site_id: selectedSiteId || null,
+        })
+        .eq('user_id', selectedPendingUser.user_id);
+
+      if (error) throw error;
+
+      // Remove from default site if exists
+      await supabase
+        .from('site_members')
+        .delete()
+        .eq('user_id', selectedPendingUser.user_id)
+        .eq('site_id', '00000000-0000-0000-0000-000000000001');
+
+      // Add to selected site
+      if (selectedSiteId) {
+        await supabase
+          .from('site_members')
+          .upsert({
+            user_id: selectedPendingUser.user_id,
+            site_id: selectedSiteId,
+            role: 'operator',
+          }, { onConflict: 'user_id,site_id' });
+      }
+
+      // Send welcome email
+      await supabase.functions.invoke('send-welcome-email', {
+        body: {
+          userId: selectedPendingUser.user_id,
+          email: selectedPendingUser.email,
+          firstName: selectedPendingUser.first_name || selectedPendingUser.display_name?.split(' ')[0] || '',
+        },
+      });
+
+      toast.success('User approved and welcome email sent');
+      setApprovalDialogOpen(false);
+      setSelectedPendingUser(null);
+      setSelectedSiteId('');
+      fetchPendingUsers();
+      fetchApprovedUsers();
+    } catch (error: any) {
+      console.error('Error approving user:', error);
+      toast.error(error.message || 'Failed to approve user');
+    } finally {
+      setApprovingUser(false);
+    }
+  };
+
+  const handleRejectUser = async (userId: string) => {
+    try {
+      await supabase.functions.invoke('delete-user', {
+        body: { userId },
+      });
+      toast.success('User rejected');
+      fetchPendingUsers();
+    } catch (error: any) {
+      toast.info('User will remain in pending state. Contact support to fully remove.');
+    }
+  };
+
+  const resendWelcomeEmail = async (approvedUser: PendingUser) => {
+    setResendingUserId(approvedUser.user_id);
+    try {
+      await supabase.functions.invoke('send-welcome-email', {
+        body: {
+          userId: approvedUser.user_id,
+          email: approvedUser.email,
+          firstName: approvedUser.first_name || approvedUser.display_name?.split(' ')[0] || '',
+        },
+      });
+      toast.success(`Welcome email sent to ${approvedUser.email}`);
+    } catch (error: any) {
+      toast.error('Failed to send welcome email');
+    } finally {
+      setResendingUserId(null);
+    }
+  };
 
   const handleCreateOrg = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -427,24 +633,281 @@ export default function Organizations() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
           <div className="min-w-0">
-            <h1 className="text-2xl lg:text-3xl font-bold text-foreground mb-1">Organizations</h1>
+            <h1 className="text-2xl lg:text-3xl font-bold text-foreground mb-1">Admin Panel</h1>
             <p className="text-sm text-muted-foreground">
-              Manage organizations and team members
+              Manage organizations and approve new users
             </p>
           </div>
-          <button
-            onClick={() => setShowCreateForm(!showCreateForm)}
-            className={cn(
-              "flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all shrink-0",
-              showCreateForm
-                ? "bg-muted text-foreground"
-                : "bg-primary text-primary-foreground hover:bg-primary/90"
-            )}
-          >
-            <Plus className="w-4 h-4" />
-            New Org
-          </button>
         </div>
+
+        {/* Site Assignment Dialog for User Approval */}
+        <Dialog open={approvalDialogOpen} onOpenChange={setApprovalDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Approve User</DialogTitle>
+              <DialogDescription>
+                Assign {selectedPendingUser?.first_name || selectedPendingUser?.display_name || selectedPendingUser?.email} to a site before approving.
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="py-4 space-y-4">
+              <div className="space-y-2">
+                <Label>User Details</Label>
+                <div className="p-3 rounded-lg bg-muted text-sm">
+                  <p className="font-medium">
+                    {selectedPendingUser?.first_name && selectedPendingUser?.surname 
+                      ? `${selectedPendingUser.first_name} ${selectedPendingUser.surname}`
+                      : selectedPendingUser?.display_name || 'No name'}
+                  </p>
+                  <p className="text-muted-foreground">{selectedPendingUser?.email}</p>
+                  {selectedPendingUser?.facility_name && (
+                    <p className="text-muted-foreground mt-1">
+                      Requested facility: {selectedPendingUser.facility_name}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="site-select">Assign to Site</Label>
+                <Select value={selectedSiteId} onValueChange={setSelectedSiteId}>
+                  <SelectTrigger id="site-select">
+                    <SelectValue placeholder="Select a site..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {sites.map((site) => (
+                      <SelectItem key={site.id} value={site.id}>
+                        <div className="flex items-center gap-2">
+                          <Building2 className="w-4 h-4 text-muted-foreground" />
+                          {site.name}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  The user will be added as an operator to this site.
+                </p>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setApprovalDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleApproveUser}
+                disabled={!selectedSiteId || approvingUser}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                {approvingUser ? (
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                ) : (
+                  <Check className="w-4 h-4 mr-2" />
+                )}
+                Approve & Send Welcome Email
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Tabs defaultValue="approvals" className="space-y-6">
+          <TabsList>
+            <TabsTrigger value="approvals" className="flex items-center gap-2">
+              <Clock className="w-4 h-4" />
+              User Approvals
+              {pendingUsers.length > 0 && (
+                <Badge variant="destructive" className="ml-1 text-xs h-5 w-5 p-0 justify-center">
+                  {pendingUsers.length}
+                </Badge>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="organizations" className="flex items-center gap-2">
+              <Building2 className="w-4 h-4" />
+              Organizations
+            </TabsTrigger>
+          </TabsList>
+
+          {/* User Approvals Tab */}
+          <TabsContent value="approvals" className="space-y-6">
+            {/* Pending Approvals */}
+            <div className="bg-card rounded-xl border border-border p-4 lg:p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 rounded-lg bg-yellow-500/10">
+                  <Clock className="w-5 h-5 text-yellow-600" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-foreground">Pending Approvals</h2>
+                  <p className="text-sm text-muted-foreground">
+                    {pendingUsers.length} user{pendingUsers.length !== 1 ? 's' : ''} awaiting approval
+                  </p>
+                </div>
+              </div>
+
+              {loadingPending ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                </div>
+              ) : pendingUsers.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <UserCheck className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                  <p>No pending approvals</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {pendingUsers.map((pendingUser) => (
+                    <div
+                      key={pendingUser.id}
+                      className="p-4 rounded-lg border border-border bg-card hover:bg-accent/5 transition-colors"
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium text-foreground">
+                            {pendingUser.first_name && pendingUser.surname 
+                              ? `${pendingUser.first_name} ${pendingUser.surname}`
+                              : pendingUser.display_name || 'No name provided'}
+                          </p>
+                          <p className="text-sm text-muted-foreground">{pendingUser.email}</p>
+                          {pendingUser.facility_name && (
+                            <p className="text-sm text-muted-foreground mt-1">
+                              <span className="font-medium">Facility:</span> {pendingUser.facility_name}
+                            </p>
+                          )}
+                          {pendingUser.phone_number && (
+                            <p className="text-sm text-muted-foreground">
+                              <span className="font-medium">Phone:</span> {pendingUser.phone_number}
+                            </p>
+                          )}
+                          <p className="text-xs text-muted-foreground mt-2">
+                            Registered {format(new Date(pendingUser.created_at), 'MMM d, yyyy h:mm a')}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <Button
+                            size="sm"
+                            onClick={() => openApprovalDialog(pendingUser)}
+                            className="bg-green-600 hover:bg-green-700"
+                          >
+                            <Check className="w-4 h-4 mr-1" />
+                            Approve
+                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button size="sm" variant="destructive">
+                                <X className="w-4 h-4 mr-1" />
+                                Reject
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Reject User?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  This will remove {pendingUser.email} from the system. They will need to register again if they want access.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => handleRejectUser(pendingUser.user_id)}
+                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                >
+                                  Reject User
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Recently Approved */}
+            <div className="bg-card rounded-xl border border-border p-4 lg:p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 rounded-lg bg-green-500/10">
+                  <Users className="w-5 h-5 text-green-600" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-foreground">Active Users</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Recently approved accounts
+                  </p>
+                </div>
+              </div>
+
+              {approvedUsers.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <p>No approved users yet</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {approvedUsers.map((approvedUser) => (
+                    <div
+                      key={approvedUser.id}
+                      className="flex items-center justify-between p-3 rounded-lg border border-border"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-foreground truncate">
+                          {approvedUser.first_name && approvedUser.surname 
+                            ? `${approvedUser.first_name} ${approvedUser.surname}`
+                            : approvedUser.display_name || 'No name'}
+                        </p>
+                        <p className="text-sm text-muted-foreground truncate">{approvedUser.email}</p>
+                        {approvedUser.facility_name && (
+                          <p className="text-xs text-muted-foreground truncate">
+                            {approvedUser.facility_name}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 ml-4">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => resendWelcomeEmail(approvedUser)}
+                          disabled={resendingUserId === approvedUser.user_id}
+                          className="text-xs"
+                        >
+                          {resendingUserId === approvedUser.user_id ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <>
+                              <Mail className="w-3 h-3 mr-1" />
+                              Resend
+                            </>
+                          )}
+                        </Button>
+                        <Badge variant="secondary" className="bg-green-500/10 text-green-700">
+                          <Check className="w-3 h-3 mr-1" />
+                          Approved
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </TabsContent>
+
+          {/* Organizations Tab */}
+          <TabsContent value="organizations" className="space-y-6">
+            {/* Create Org Button */}
+            <div className="flex justify-end">
+              <button
+                onClick={() => setShowCreateForm(!showCreateForm)}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all shrink-0",
+                  showCreateForm
+                    ? "bg-muted text-foreground"
+                    : "bg-primary text-primary-foreground hover:bg-primary/90"
+                )}
+              >
+                <Plus className="w-4 h-4" />
+                New Org
+              </button>
+            </div>
 
         {/* Create Form */}
         {showCreateForm && (
@@ -788,6 +1251,8 @@ export default function Organizations() {
             )}
           </div>
         </div>
+          </TabsContent>
+        </Tabs>
       </div>
     </AppLayout>
   );
