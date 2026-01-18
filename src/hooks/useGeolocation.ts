@@ -1,60 +1,23 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-
-type GeoPermissionState = "granted" | "denied" | "prompt" | "unsupported" | "unknown";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export type GeoCoords = { lat: number; lng: number; accuracyMeters?: number };
 
 export function useGeolocation() {
-  const [permission, setPermission] = useState<GeoPermissionState>("unknown");
   const [coords, setCoords] = useState<GeoCoords | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isRequesting, setIsRequesting] = useState(false);
-
-  const mountedRef = useRef(true);
+  const mounted = useRef(true);
 
   useEffect(() => {
-    mountedRef.current = true;
+    mounted.current = true;
     return () => {
-      mountedRef.current = false;
-    };
-  }, []);
-
-  // Best-effort permission detection (not supported everywhere)
-  useEffect(() => {
-    let cancelled = false;
-
-    async function checkPermission() {
-      try {
-        const p = await navigator.permissions?.query?.({ name: "geolocation" } as PermissionDescriptor);
-        if (!p) return;
-
-        if (cancelled) return;
-        setPermission(p.state as GeoPermissionState);
-
-        p.onchange = () => {
-          if (!mountedRef.current) return;
-          setPermission(p.state as GeoPermissionState);
-        };
-      } catch {
-        // Ignore, we'll just request and handle errors normally.
-      }
-    }
-
-    if (!("geolocation" in navigator)) {
-      setPermission("unsupported");
-      return;
-    }
-
-    checkPermission();
-    return () => {
-      cancelled = true;
+      mounted.current = false;
     };
   }, []);
 
   const request = useCallback(async () => {
     if (!("geolocation" in navigator)) {
-      setPermission("unsupported");
-      setError("Geolocation is not supported on this device/browser.");
+      setError("Geolocation not supported on this browser/device.");
       return null;
     }
 
@@ -64,39 +27,32 @@ export function useGeolocation() {
     const opts: PositionOptions = {
       enableHighAccuracy: true,
       timeout: 15000,
-      maximumAge: 30_000,
+      maximumAge: 30000,
     };
 
     const result = await new Promise<GeoCoords | null>((resolve) => {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          if (!mountedRef.current) return resolve(null);
-          const next: GeoCoords = {
+          if (!mounted.current) return resolve(null);
+          const next = {
             lat: pos.coords.latitude,
             lng: pos.coords.longitude,
             accuracyMeters: pos.coords.accuracy,
           };
           setCoords(next);
-          setPermission("granted");
           resolve(next);
         },
         (err) => {
-          if (!mountedRef.current) return resolve(null);
-
-          // Human-friendly error mapping
+          if (!mounted.current) return resolve(null);
           let msg = "Unable to get your location.";
           if (err.code === err.PERMISSION_DENIED) {
             msg =
-              "Location permission denied. Enable location access for this site in your browser settings, or pick the incident location on the map.";
-            setPermission("denied");
+              "Location permission denied. Enable it in browser settings, or pick the location on the map.";
           } else if (err.code === err.POSITION_UNAVAILABLE) {
-            msg =
-              "Location unavailable (GPS/network). Try again, move outdoors, or pick the incident location on the map.";
+            msg = "Location unavailable. Try again, or pick the location on the map.";
           } else if (err.code === err.TIMEOUT) {
-            msg =
-              "Location request timed out. Try again, or pick the incident location on the map.";
+            msg = "Location request timed out. Try again, or pick the location on the map.";
           }
-
           setError(msg);
           resolve(null);
         },
@@ -104,14 +60,9 @@ export function useGeolocation() {
       );
     });
 
-    if (mountedRef.current) setIsRequesting(false);
+    if (mounted.current) setIsRequesting(false);
     return result;
   }, []);
 
-  const value = useMemo(
-    () => ({ permission, coords, error, isRequesting, request }),
-    [permission, coords, error, isRequesting, request]
-  );
-
-  return value;
+  return { coords, error, isRequesting, request };
 }

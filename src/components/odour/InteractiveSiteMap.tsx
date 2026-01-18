@@ -164,7 +164,7 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
   };
 
   // Get GPS position on map
-  const gpsPosition = geo.permission === 'granted' && geo.coords
+  const gpsPosition = geo.coords
     ? geoToMapPosition(geo.coords.lat, geo.coords.lng)
     : null;
 
