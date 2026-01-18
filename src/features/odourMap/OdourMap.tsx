@@ -32,6 +32,8 @@ function ClickPicker(props: { onPick: (lat: number, lng: number) => void }) {
 }
 
 export function OdourMap() {
+  console.log("[OdourMap] Component mounting...");
+  
   const { profile } = useAuth();
   const { site, loading: siteLoading } = useSite();
   const geo = useGeolocation();
@@ -40,6 +42,8 @@ export function OdourMap() {
   // Get orgId from site (preferred) or profile as fallback
   const orgId = site?.org_id || (profile as any)?.org_id;
   const siteId = site?.id;
+  
+  console.log("[OdourMap] Context:", { orgId, siteId, siteLoading, hasProfile: !!profile, hasSite: !!site });
 
   const [siteMapUrl, setSiteMapUrl] = useState<string | null>(null);
   const [siteMapName, setSiteMapName] = useState<string | null>(null);
@@ -61,7 +65,10 @@ export function OdourMap() {
     let cancelled = false;
 
     async function load() {
+      console.log("[OdourMap] load() called", { siteId, orgId });
+      
       if (!siteId) {
+        console.log("[OdourMap] No siteId, skipping load");
         setLoading(false);
         return;
       }
@@ -69,17 +76,21 @@ export function OdourMap() {
       setLoading(true);
       try {
         if (orgId) {
+          console.log("[OdourMap] Loading site map...");
           const map = await loadSiteMap({ orgId, siteId });
+          console.log("[OdourMap] Site map loaded:", map);
           if (!cancelled) {
             setSiteMapUrl(map.signedUrl);
             setSiteMapName(map.record?.file_name ?? null);
           }
 
+          console.log("[OdourMap] Loading incidents...");
           const list = await listIncidents({ orgId, siteId });
+          console.log("[OdourMap] Incidents loaded:", list.length);
           if (!cancelled) setIncidents(list);
         }
       } catch (err) {
-        console.error("Error loading odour map data:", err);
+        console.error("[OdourMap] Error loading odour map data:", err);
       } finally {
         if (!cancelled) setLoading(false);
       }
