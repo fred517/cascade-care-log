@@ -16,11 +16,30 @@ import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerIcon from "leaflet/dist/images/marker-icon.png";
 import markerShadow from "leaflet/dist/images/marker-shadow.png";
 
-L.Icon.Default.mergeOptions({
+// Safer marker icon setup for Vite bundling
+const DEFAULT_MARKER_ICON = L.icon({
   iconRetinaUrl: markerIcon2x,
   iconUrl: markerIcon,
   shadowUrl: markerShadow,
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41],
 });
+
+// Best-effort: keep Leaflet defaults in sync without crashing the app
+try {
+  const anyDefault = L.Icon.Default as any;
+  if (typeof anyDefault?.mergeOptions === "function") {
+    anyDefault.mergeOptions({
+      iconRetinaUrl: markerIcon2x,
+      iconUrl: markerIcon,
+      shadowUrl: markerShadow,
+    });
+  }
+} catch (e) {
+  console.warn("[OdourMap] Leaflet default icon merge failed", e);
+}
 
 function ClickPicker(props: { onPick: (lat: number, lng: number) => void }) {
   useMapEvents({
@@ -104,10 +123,11 @@ export function OdourMap() {
 
   // Fetch weather when we have a center location
   useEffect(() => {
+    if (typeof fetchWeather !== "function") return;
     const lat = draftLat ?? incidents[0]?.lat ?? -27.4698;
     const lng = draftLng ?? incidents[0]?.lng ?? 153.0251;
     fetchWeather(lat, lng);
-  }, [siteId]); // Fetch once when site loads
+  }, [siteId, fetchWeather]); // Fetch once when site loads
 
   const center = useMemo(() => {
     if (draftLat != null && draftLng != null) return [draftLat, draftLng] as [number, number];
@@ -255,7 +275,7 @@ export function OdourMap() {
           {weather ? (
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
               <div className="flex items-center gap-2 rounded-lg bg-muted/50 p-3">
-                <Thermometer className="h-5 w-5 text-orange-500" />
+                <Thermometer className="h-5 w-5 text-primary" />
                 <div>
                   <div className="text-xs text-muted-foreground">Temperature</div>
                   <div className="font-semibold">{weather.temperature.toFixed(1)}°C</div>
@@ -266,7 +286,7 @@ export function OdourMap() {
               </div>
 
               <div className="flex items-center gap-2 rounded-lg bg-muted/50 p-3">
-                <Wind className="h-5 w-5 text-blue-500" />
+                <Wind className="h-5 w-5 text-primary" />
                 <div>
                   <div className="text-xs text-muted-foreground">Wind</div>
                   <div className="font-semibold">{weather.wind_speed.toFixed(1)} m/s</div>
@@ -277,24 +297,20 @@ export function OdourMap() {
               </div>
 
               <div className="flex items-center gap-2 rounded-lg bg-muted/50 p-3">
-                <Droplets className="h-5 w-5 text-cyan-500" />
+                <Droplets className="h-5 w-5 text-primary" />
                 <div>
                   <div className="text-xs text-muted-foreground">Humidity</div>
                   <div className="font-semibold">{weather.humidity}%</div>
-                  <div className="text-xs text-muted-foreground">
-                    {weather.pressure} hPa
-                  </div>
+                  <div className="text-xs text-muted-foreground">{weather.pressure} hPa</div>
                 </div>
               </div>
 
               <div className="flex items-center gap-2 rounded-lg bg-muted/50 p-3">
-                <Eye className="h-5 w-5 text-gray-500" />
+                <Eye className="h-5 w-5 text-primary" />
                 <div>
                   <div className="text-xs text-muted-foreground">Visibility</div>
                   <div className="font-semibold">{weather.visibility.toFixed(1)} km</div>
-                  <div className="text-xs text-muted-foreground">
-                    Clouds: {weather.clouds}%
-                  </div>
+                  <div className="text-xs text-muted-foreground">Clouds: {weather.clouds}%</div>
                 </div>
               </div>
 
@@ -427,13 +443,13 @@ export function OdourMap() {
                   <ClickPicker onPick={(lat, lng) => { setDraftLat(lat); setDraftLng(lng); }} />
 
                   {draftLat != null && draftLng != null ? (
-                    <Marker position={[draftLat, draftLng]}>
+                    <Marker position={[draftLat, draftLng]} icon={DEFAULT_MARKER_ICON}>
                       <Popup>New incident location</Popup>
                     </Marker>
                   ) : null}
 
                   {incidents.map((i) => (
-                    <Marker key={i.id} position={[i.lat, i.lng]}>
+                    <Marker key={i.id} position={[i.lat, i.lng]} icon={DEFAULT_MARKER_ICON}>
                       <Popup>
                         <div className="text-sm font-semibold">Intensity: {i.intensity}/5</div>
                         <div className="text-xs">{new Date(i.occurred_at).toLocaleString()}</div>
