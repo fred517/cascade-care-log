@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Wind, Thermometer, Droplets, AlertTriangle, Loader2 } from 'lucide-react';
+import { Wind, Thermometer, Droplets, AlertTriangle, Loader2, MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useCreateOdourIncident, useFetchWeather } from '@/hooks/useOdourMapping';
+import { useGeolocation } from '@/hooks/useGeolocation';
 import { FIDOL_SCALE, type WeatherData } from '@/types/odour';
 
 interface OdourIncidentFormProps {
@@ -27,8 +28,12 @@ export default function OdourIncidentForm({
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [fetchingWeather, setFetchingWeather] = useState(false);
 
+  const geo = useGeolocation();
   const createIncident = useCreateOdourIncident();
   const fetchWeather = useFetchWeather();
+
+  // Effective coordinates: prefer map click, fall back to GPS
+  const effectivePosition = clickPosition ?? (geo.status === "granted" ? geo.coords : null);
 
   // Auto-fetch weather when form opens and we have coordinates
   useEffect(() => {
@@ -49,12 +54,12 @@ export default function OdourIncidentForm({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!clickPosition) return;
+    if (!effectivePosition) return;
 
     await createIncident.mutateAsync({
       facility_id: facilityId,
-      lat: clickPosition.lat,
-      lng: clickPosition.lng,
+      lat: effectivePosition.lat,
+      lng: effectivePosition.lng,
       intensity,
       description: description || null,
       wind_speed: weather?.wind_speed ?? null,
@@ -123,6 +128,38 @@ export default function OdourIncidentForm({
             )}
           </div>
 
+          {/* GPS Location */}
+          <div className="bg-muted/50 rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="font-semibold text-sm">Location</h4>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={geo.request}
+                disabled={geo.status === "requesting"}
+              >
+                <MapPin className="w-4 h-4 mr-1" />
+                {geo.status === "requesting" ? "Getting location..." : "Use my location"}
+              </Button>
+            </div>
+            
+            {geo.status === "granted" && !clickPosition ? (
+              <p className="text-sm">
+                GPS: {geo.coords.lat.toFixed(6)}, {geo.coords.lng.toFixed(6)} 
+                <span className="text-muted-foreground"> (±{geo.coords.accuracy?.toFixed(0) ?? 0}m)</span>
+              </p>
+            ) : clickPosition ? (
+              <p className="text-sm">
+                Map: {clickPosition.lat.toFixed(6)}, {clickPosition.lng.toFixed(6)}
+              </p>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {geo.error || "Click map or use GPS to set location"}
+              </p>
+            )}
+          </div>
+
           {/* Intensity */}
           <div className="space-y-2">
             <Label>Intensity</Label>
@@ -164,7 +201,7 @@ export default function OdourIncidentForm({
             <Button type="button" variant="outline" onClick={handleClose}>
               Cancel
             </Button>
-            <Button type="submit" disabled={createIncident.isPending}>
+            <Button type="submit" disabled={createIncident.isPending || !effectivePosition}>
               {createIncident.isPending ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
