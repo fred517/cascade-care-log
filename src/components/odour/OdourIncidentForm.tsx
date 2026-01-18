@@ -32,7 +32,7 @@ export default function OdourIncidentForm({
 
   // Effective coordinates: prefer map click (if valid), fall back to GPS
   const isValidClick = clickPosition && (clickPosition.lat !== 0 || clickPosition.lng !== 0);
-  const effectivePosition = isValidClick ? clickPosition : (geo.permission === "granted" && geo.coords ? geo.coords : null);
+  const effectivePosition = isValidClick ? clickPosition : (geo.coords ? geo.coords : null);
 
   // Auto-fetch weather when form opens and we have coordinates
   useEffect(() => {
@@ -108,7 +108,7 @@ export default function OdourIncidentForm({
             {effectivePosition ? (
               <p className="text-sm text-green-600">
                 📍 {effectivePosition.lat.toFixed(6)}, {effectivePosition.lng.toFixed(6)}
-                {geo.permission === "granted" && !isValidClick && geo.coords && (
+                {!isValidClick && geo.coords && (
                   <span className="text-muted-foreground"> (GPS ±{geo.coords.accuracyMeters?.toFixed(0) ?? 0}m)</span>
                 )}
               </p>
