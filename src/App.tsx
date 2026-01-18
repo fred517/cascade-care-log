@@ -14,6 +14,7 @@ import Settings from "./pages/Settings";
 import Reports from "./pages/Reports";
 import Auth from "./pages/Auth";
 import ResetPassword from "./pages/ResetPassword";
+import EmailConfirmation from "./pages/EmailConfirmation";
 import NotFound from "./pages/NotFound";
 import Organizations from "./pages/Organizations";
 import EnvironmentMonitor from "./pages/EnvironmentMonitor";
@@ -30,6 +31,7 @@ const App = () => (
           <Routes>
             <Route path="/auth" element={<Auth />} />
             <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/confirm-email" element={<EmailConfirmation />} />
             <Route
               path="/"
               element={
