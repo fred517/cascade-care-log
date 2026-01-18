@@ -150,6 +150,15 @@ export function OdourMap() {
   async function submit() {
     if (!ready) return;
 
+    // Fetch fresh weather data for the incident location
+    let currentWeather = weather;
+    if (draftLat != null && draftLng != null) {
+      const freshWeather = await fetchWeather(draftLat, draftLng);
+      if (freshWeather) {
+        currentWeather = freshWeather;
+      }
+    }
+
     const created = await createIncident({
       org_id: orgId,
       site_id: siteId,
@@ -159,6 +168,7 @@ export function OdourMap() {
       intensity,
       description: description.trim(),
       source: source.trim() || null,
+      weather: currentWeather,
     });
 
     setIncidents((prev) => [created, ...prev]);
@@ -420,6 +430,18 @@ export function OdourMap() {
                         {i.source ? (
                           <div className="mt-1 text-xs text-muted-foreground">Source: {i.source}</div>
                         ) : null}
+                        {(i.temperature != null || i.wind_speed != null) && (
+                          <div className="mt-2 pt-2 border-t text-xs text-muted-foreground">
+                            {i.temperature != null && <span>{i.temperature.toFixed(1)}°C</span>}
+                            {i.wind_speed != null && (
+                              <span className="ml-2">
+                                💨 {i.wind_speed.toFixed(1)} m/s
+                                {i.wind_dir != null && ` (${i.wind_dir}°)`}
+                              </span>
+                            )}
+                            {i.humidity != null && <span className="ml-2">💧 {i.humidity}%</span>}
+                          </div>
+                        )}
                       </Popup>
                     </Marker>
                   ))}
@@ -444,8 +466,10 @@ export function OdourMap() {
                         </div>
                       </div>
                       <div className="mt-1 text-sm">{i.description}</div>
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        ({i.lat.toFixed(5)}, {i.lng.toFixed(5)})
+                      <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
+                        <span>({i.lat.toFixed(5)}, {i.lng.toFixed(5)})</span>
+                        {i.temperature != null && <span>🌡️ {i.temperature.toFixed(1)}°C</span>}
+                        {i.wind_speed != null && <span>💨 {i.wind_speed.toFixed(1)} m/s</span>}
                       </div>
                     </li>
                   ))}
