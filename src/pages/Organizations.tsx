@@ -308,6 +308,11 @@ export default function Organizations() {
 
     setApprovingUser(true);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) {
+        throw new Error('Your session has expired. Please sign in again and retry.');
+      }
+
       const facilityName = selectedPendingUser.facility_name?.trim();
       let createdSiteId: string | null = null;
       let createdOrgId: string | null = null;
@@ -506,6 +511,11 @@ export default function Organizations() {
 
     setCreating(true);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) {
+        throw new Error('Your session has expired. Please sign in again and retry.');
+      }
+
       // Create organization
       const orgId = crypto.randomUUID();
       const { error: orgError } = await supabase
