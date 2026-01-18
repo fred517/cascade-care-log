@@ -10,7 +10,7 @@ import SiteMapUpload from '@/components/odour/SiteMapUpload';
 import OdourIncidentForm from '@/components/odour/OdourIncidentForm';
 import OdourIncidentReport from '@/components/odour/OdourIncidentReport';
 import { format, subMonths, startOfMonth, endOfMonth, eachMonthOfInterval } from 'date-fns';
-import { FIDOL_SCALE, type OdourIncident, type SiteMap } from '@/types/odour';
+import { FIDOL_SCALE, type OdourIncident } from '@/types/odour';
 import { cn } from '@/lib/utils';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
@@ -18,7 +18,6 @@ export default function OdourMap() {
   const [showUpload, setShowUpload] = useState(false);
   const [showIncidentForm, setShowIncidentForm] = useState(false);
   const [showReport, setShowReport] = useState(false);
-  const [selectedMap, setSelectedMap] = useState<SiteMap | null>(null);
   const [clickPosition, setClickPosition] = useState<{ lat: number; lng: number } | null>(null);
   const [selectedIncident, setSelectedIncident] = useState<OdourIncident | null>(null);
 
