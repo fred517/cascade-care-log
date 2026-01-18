@@ -14,12 +14,15 @@ import {
 import { Reading, Threshold, PARAMETERS, ParameterKey, getDefaultThresholds } from '@/types/wastewater';
 import { format } from 'date-fns';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { cn } from '@/lib/utils';
 interface MetricChartProps {
   metricId: ParameterKey;
   readings: Reading[];
   threshold?: Threshold;
   days?: number;
   showThresholdBands?: boolean;
+  /** Override the outer chart container sizing (e.g. "h-full") */
+  containerClassName?: string;
 }
 
 export function MetricChart({ 
@@ -27,7 +30,8 @@ export function MetricChart({
   readings, 
   threshold,
   days = 30,
-  showThresholdBands = true 
+  showThresholdBands = true,
+  containerClassName = 'h-64',
 }: MetricChartProps) {
   const param = PARAMETERS[metricId];
   const defaults = getDefaultThresholds(param);
@@ -97,14 +101,19 @@ export function MetricChart({
 
   if (chartData.length === 0) {
     return (
-      <div className="h-64 min-w-0 overflow-hidden flex items-center justify-center text-muted-foreground">
+      <div
+        className={cn(
+          "chart-clip w-full flex items-center justify-center text-muted-foreground",
+          containerClassName
+        )}
+      >
         No data available for the selected period
       </div>
     );
   }
 
   return (
-    <div className="h-64 w-full min-w-0 overflow-hidden [&_.recharts-responsive-container]:min-w-0 [&_.recharts-wrapper]:overflow-hidden [&_.recharts-surface]:overflow-hidden">
+    <div className={cn("chart-clip w-full", containerClassName)}>
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart
           data={chartData}
