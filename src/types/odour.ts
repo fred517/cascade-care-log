@@ -38,6 +38,7 @@ export interface FacilitySitemap {
 
 export interface OdourIncident {
   id: string;
+  site_id: string | null;
   facility_id: string;
   occurred_at: string;
   lat: number;
