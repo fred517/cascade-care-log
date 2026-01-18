@@ -151,32 +151,60 @@ export default function Organizations() {
     if (!user) return;
     
     try {
-      // Get all orgs the user is a member of
-      const { data: memberships, error: memError } = await supabase
-        .from('org_members')
-        .select('org_id, role')
-        .eq('user_id', user.id);
+      // Check if user is a global admin
+      const { data: userRole } = await supabase
+        .rpc('get_user_role', { _user_id: user.id });
+      const isGlobalAdmin = userRole === 'admin';
 
-      if (memError) throw memError;
+      let orgs: Organization[] = [];
+      let memberships: { org_id: string; role: string }[] = [];
 
-      if (!memberships || memberships.length === 0) {
-        setOrganizations([]);
-        setLoading(false);
-        return;
+      if (isGlobalAdmin) {
+        // Global admins see all organizations
+        const { data: allOrgs, error: orgsError } = await supabase
+          .from('organizations')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (orgsError) throw orgsError;
+        orgs = allOrgs || [];
+
+        // Fetch memberships for the admin (to set correct role if they're a member)
+        const { data: adminMemberships } = await supabase
+          .from('org_members')
+          .select('org_id, role')
+          .eq('user_id', user.id);
+        memberships = adminMemberships || [];
+      } else {
+        // Regular users see only orgs they're members of
+        const { data: userMemberships, error: memError } = await supabase
+          .from('org_members')
+          .select('org_id, role')
+          .eq('user_id', user.id);
+
+        if (memError) throw memError;
+        memberships = userMemberships || [];
+
+        if (memberships.length === 0) {
+          setOrganizations([]);
+          setLoading(false);
+          return;
+        }
+
+        const orgIds = memberships.map(m => m.org_id);
+        
+        const { data: memberOrgs, error: orgsError } = await supabase
+          .from('organizations')
+          .select('*')
+          .in('id', orgIds);
+
+        if (orgsError) throw orgsError;
+        orgs = memberOrgs || [];
       }
-
-      const orgIds = memberships.map(m => m.org_id);
-      
-      const { data: orgs, error: orgsError } = await supabase
-        .from('organizations')
-        .select('*')
-        .in('id', orgIds);
-
-      if (orgsError) throw orgsError;
 
       // Get member counts
       const orgsWithDetails = await Promise.all(
-        (orgs || []).map(async (org) => {
+        orgs.map(async (org) => {
           const { count } = await supabase
             .from('org_members')
             .select('*', { count: 'exact', head: true })
@@ -187,7 +215,8 @@ export default function Organizations() {
           return {
             ...org,
             member_count: count || 0,
-            user_role: membership?.role as OrgRole,
+            // Global admins get 'admin' role for all orgs if not explicit member
+            user_role: (membership?.role as OrgRole) || (isGlobalAdmin ? 'admin' : undefined),
           };
         })
       );
