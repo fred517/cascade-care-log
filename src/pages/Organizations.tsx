@@ -318,21 +318,21 @@ export default function Organizations() {
       const shouldAssignToExisting = assignmentMode === 'existing' && selectedOrgId;
 
       if (shouldCreateNewOrg) {
+        const orgId = crypto.randomUUID();
+
         // Create organization with the facility name
-        const { data: newOrg, error: orgError } = await supabase
+        const { error: orgError } = await supabase
           .from('organizations')
-          .insert({ name: facilityName })
-          .select()
-          .single();
+          .insert({ id: orgId, name: facilityName });
 
         if (orgError) throw orgError;
-        createdOrgId = newOrg.id;
+        createdOrgId = orgId;
 
         // Add the approved user as owner of the organization
         const { error: orgMemberError } = await supabase
           .from('org_members')
           .insert({
-            org_id: newOrg.id,
+            org_id: orgId,
             user_id: selectedPendingUser.user_id,
             role: 'owner',
           });
@@ -344,7 +344,7 @@ export default function Organizations() {
           .from('sites')
           .insert({
             name: facilityName,
-            org_id: newOrg.id,
+            org_id: orgId,
           })
           .select()
           .single();
@@ -507,11 +507,10 @@ export default function Organizations() {
     setCreating(true);
     try {
       // Create organization
-      const { data: newOrg, error: orgError } = await supabase
+      const orgId = crypto.randomUUID();
+      const { error: orgError } = await supabase
         .from('organizations')
-        .insert({ name: newOrgName.trim() })
-        .select()
-        .single();
+        .insert({ id: orgId, name: newOrgName.trim() });
 
       if (orgError) throw orgError;
 
@@ -519,7 +518,7 @@ export default function Organizations() {
       const { error: memberError } = await supabase
         .from('org_members')
         .insert({
-          org_id: newOrg.id,
+          org_id: orgId,
           user_id: user!.id,
           role: 'owner',
         });
