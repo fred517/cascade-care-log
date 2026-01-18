@@ -1002,6 +1002,53 @@ export type Database = {
           },
         ]
       }
+      site_playbooks: {
+        Row: {
+          condition: string
+          created_at: string
+          id: string
+          is_active: boolean | null
+          metric_id: string
+          reference_links: string[]
+          site_id: string
+          steps: string[]
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          condition: string
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          metric_id: string
+          reference_links?: string[]
+          site_id: string
+          steps?: string[]
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          condition?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          metric_id?: string
+          reference_links?: string[]
+          site_id?: string
+          steps?: string[]
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "site_playbooks_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       site_sitemaps: {
         Row: {
           public_url: string
