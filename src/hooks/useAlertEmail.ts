@@ -10,6 +10,20 @@ interface TriggerAlertParams {
   siteName?: string;
   siteId?: string;
   playbook?: string;
+  playbookSteps?: string[];
+}
+
+interface AlertEvent {
+  id: string;
+  metric_id: string;
+  metric_name: string;
+  value: number;
+  threshold_min: number | null;
+  threshold_max: number | null;
+  severity: string;
+  status: string;
+  triggered_at: string;
+  site_id: string | null;
 }
 
 export function useAlertEmail() {
@@ -21,7 +35,8 @@ export function useAlertEmail() {
     siteName = 'Main Treatment Plant',
     siteId,
     playbook,
-  }: TriggerAlertParams) => {
+    playbookSteps,
+  }: TriggerAlertParams): Promise<AlertEvent | null> => {
     const param = PARAMETERS[metricId];
     
     // Use the new severity system
@@ -40,11 +55,15 @@ export function useAlertEmail() {
           threshold_max: thresholdMax,
           severity,
           status: 'active',
+          site_id: siteId,
         })
         .select()
         .single();
 
       if (alertError) throw alertError;
+
+      // Prepare action steps - use provided playbook steps or fall back to parameter defaults
+      const actionSteps = playbookSteps || param.actions?.[severityLevel === 'alarm' ? 'alarm' : 'watch'] || [];
 
       // Send email notification via edge function
       const { error: emailError } = await supabase.functions.invoke('send-alert-email', {
@@ -60,9 +79,10 @@ export function useAlertEmail() {
           siteName,
           siteId,
           triggeredAt: new Date().toISOString(),
-          playbook,
-          // Include action steps from parameter definition
-          actionSteps: param.actions?.[severityLevel === 'alarm' ? 'alarm' : 'watch'] || [],
+          playbook: playbook || (actionSteps.length > 0 
+            ? `<ul>${actionSteps.map(s => `<li>${s}</li>`).join('')}</ul>` 
+            : undefined),
+          actionSteps,
         },
       });
 
@@ -86,8 +106,9 @@ export function useAlertEmail() {
     value: number,
     thresholdMin: number,
     thresholdMax: number,
-    playbooks?: { condition: string; steps: string[] }[]
-  ) => {
+    siteId?: string,
+    playbookSteps?: string[]
+  ): Promise<AlertEvent | null> => {
     const param = PARAMETERS[metricId];
     const severityLevel = getSeverity(value, param);
     
@@ -96,20 +117,37 @@ export function useAlertEmail() {
 
     const condition = value < thresholdMin ? 'low' : 'high';
     
-    // Use playbooks from props or fall back to parameter actions
-    const matchingPlaybook = playbooks?.find(p => p.condition === condition);
-    const actionSteps = matchingPlaybook?.steps || param.actions?.[severityLevel] || [];
+    // Try to get site-specific playbook steps
+    let steps = playbookSteps;
     
-    const playbookHtml = actionSteps.length > 0
-      ? `<ul>${actionSteps.map(s => `<li>${s}</li>`).join('')}</ul>`
-      : undefined;
+    if (!steps && siteId) {
+      // Fetch playbook from database
+      const { data: sitePlaybook } = await supabase
+        .from('site_playbooks')
+        .select('steps')
+        .eq('site_id', siteId)
+        .eq('metric_id', metricId)
+        .eq('condition', condition)
+        .eq('is_active', true)
+        .maybeSingle();
+      
+      if (sitePlaybook?.steps) {
+        steps = sitePlaybook.steps;
+      }
+    }
+    
+    // Fall back to parameter defaults
+    if (!steps) {
+      steps = param.actions?.[severityLevel] || [];
+    }
 
     return triggerAlert({
       metricId,
       value,
       thresholdMin,
       thresholdMax,
-      playbook: playbookHtml,
+      siteId,
+      playbookSteps: steps,
     });
   };
 

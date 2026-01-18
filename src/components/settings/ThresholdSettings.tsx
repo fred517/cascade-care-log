@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { Threshold, PARAMETERS, ParameterKey, getDefaultThresholds, getParametersByCategory, ParameterCategory } from '@/types/wastewater';
-import { Check, RotateCcw, ChevronDown } from 'lucide-react';
+import { Threshold, PARAMETERS, ParameterKey, getDefaultThresholds, getParametersByCategory, ParameterCategory, PARAMETER_ICONS } from '@/types/wastewater';
+import { Check, RotateCcw, ChevronDown, BookOpen, ArrowDown, ArrowUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { usePlaybooks } from '@/hooks/usePlaybooks';
+import { Badge } from '@/components/ui/badge';
 
 interface ThresholdSettingsProps {
   thresholds: Threshold[];
@@ -15,6 +17,7 @@ export function ThresholdSettings({ thresholds, onSave }: ThresholdSettingsProps
   const [expandedCategories, setExpandedCategories] = useState<Set<ParameterCategory>>(
     new Set(['Core', 'Process'])
   );
+  const { getPlaybook, loading: playbooksLoading } = usePlaybooks();
 
   const handleChange = (metricId: ParameterKey, field: 'min' | 'max' | 'enabled', value: number | boolean) => {
     setLocalThresholds(prev => prev.map(t => 
@@ -99,6 +102,7 @@ export function ThresholdSettings({ thresholds, onSave }: ThresholdSettingsProps
                     >
                       <div className="flex items-start justify-between mb-4">
                         <div className="flex items-center gap-3">
+                          <span className="text-xl">{PARAMETER_ICONS[param.key]}</span>
                           <label className="relative inline-flex items-center cursor-pointer">
                             <input
                               type="checkbox"
@@ -156,8 +160,34 @@ export function ThresholdSettings({ thresholds, onSave }: ThresholdSettingsProps
                         </div>
                       </div>
                       
+                      {/* Playbook indicators */}
+                      {!playbooksLoading && (
+                        <div className="mt-4 pt-4 border-t border-border/50">
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+                            <BookOpen className="w-4 h-4" />
+                            <span>Response Playbooks</span>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {(param.watch?.min !== undefined || param.alarm?.min !== undefined) && (
+                              <PlaybookIndicator 
+                                metricId={param.key}
+                                condition="low"
+                                playbook={getPlaybook(param.key, 'low')}
+                              />
+                            )}
+                            {(param.watch?.max !== undefined || param.alarm?.max !== undefined) && (
+                              <PlaybookIndicator 
+                                metricId={param.key}
+                                condition="high"
+                                playbook={getPlaybook(param.key, 'high')}
+                              />
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      
                       {param.methodHint && (
-                        <p className="text-xs text-muted-foreground mt-2 italic">
+                        <p className="text-xs text-muted-foreground mt-3 italic">
                           💡 {param.methodHint}
                         </p>
                       )}
@@ -189,6 +219,35 @@ export function ThresholdSettings({ thresholds, onSave }: ThresholdSettingsProps
           )}
         </button>
       </div>
+    </div>
+  );
+}
+
+interface PlaybookIndicatorProps {
+  metricId: ParameterKey;
+  condition: 'low' | 'high';
+  playbook: any;
+}
+
+function PlaybookIndicator({ metricId, condition, playbook }: PlaybookIndicatorProps) {
+  const hasSteps = playbook && playbook.steps && playbook.steps.length > 0;
+  
+  return (
+    <div className={cn(
+      "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs",
+      condition === 'low'
+        ? "bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300"
+        : "bg-orange-50 dark:bg-orange-950/30 text-orange-700 dark:text-orange-300"
+    )}>
+      {condition === 'low' ? (
+        <ArrowDown className="w-3 h-3" />
+      ) : (
+        <ArrowUp className="w-3 h-3" />
+      )}
+      <span className="font-medium capitalize">{condition}</span>
+      <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+        {hasSteps ? `${playbook.steps.length} steps` : 'Default'}
+      </Badge>
     </div>
   );
 }

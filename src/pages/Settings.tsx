@@ -7,6 +7,7 @@ import { SiteMemberManagement } from '@/components/settings/SiteMemberManagement
 import CalibrationManager from '@/components/settings/CalibrationManager';
 import UserApproval from '@/components/settings/UserApproval';
 import { MetricConfiguration } from '@/components/settings/MetricConfiguration';
+import { PlaybookSettings } from '@/components/settings/PlaybookSettings';
 import { Threshold, MetricType, METRICS } from '@/types/wastewater';
 import { useReadings } from '@/hooks/useReadings';
 import { useSite } from '@/hooks/useSite';
@@ -14,10 +15,10 @@ import { useAuth } from '@/hooks/useAuth';
 import { useMissingReadingsReminder } from '@/hooks/useMissingReadingsReminder';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
-import { Sliders, Bell, Users, Building2, Check, RotateCcw, Loader2, Send, AlertCircle, CheckCircle2, FileText, ShieldAlert, UserCog, UsersRound, Wrench, UserCheck, LayoutGrid } from 'lucide-react';
+import { Sliders, Bell, Users, Building2, Check, RotateCcw, Loader2, Send, AlertCircle, CheckCircle2, FileText, ShieldAlert, UserCog, UsersRound, Wrench, UserCheck, LayoutGrid, BookOpen } from 'lucide-react';
 import { toast } from 'sonner';
 
-type SettingsTab = 'metrics' | 'thresholds' | 'calibrations' | 'notifications' | 'team' | 'site-members' | 'users' | 'approvals' | 'site';
+type SettingsTab = 'metrics' | 'thresholds' | 'playbooks' | 'calibrations' | 'notifications' | 'team' | 'site-members' | 'users' | 'approvals' | 'site';
 
 export default function Settings() {
   const { site, loading: siteLoading } = useSite();
@@ -88,6 +89,7 @@ export default function Settings() {
   const tabs = [
     { key: 'metrics' as const, label: 'Metrics', icon: LayoutGrid, adminOnly: true },
     { key: 'thresholds' as const, label: 'Thresholds', icon: Sliders },
+    { key: 'playbooks' as const, label: 'Playbooks', icon: BookOpen },
     { key: 'calibrations' as const, label: 'Calibrations', icon: Wrench },
     { key: 'notifications' as const, label: 'Notifications', icon: Bell },
     { key: 'team' as const, label: 'Team', icon: Users },
@@ -362,6 +364,10 @@ export default function Settings() {
                 </>
               )}
             </div>
+          )}
+
+          {activeTab === 'playbooks' && (
+            <PlaybookSettings />
           )}
 
           {activeTab === 'notifications' && (
