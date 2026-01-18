@@ -32,7 +32,7 @@ export default function OdourIncidentForm({
 
   // Effective coordinates: prefer map click (if valid), fall back to GPS
   const isValidClick = clickPosition && (clickPosition.lat !== 0 || clickPosition.lng !== 0);
-  const effectivePosition = isValidClick ? clickPosition : (geo.status === "granted" ? geo.coords : null);
+  const effectivePosition = isValidClick ? clickPosition : (geo.permission === "granted" && geo.coords ? geo.coords : null);
 
   // Auto-fetch weather when form opens and we have coordinates
   useEffect(() => {
@@ -98,23 +98,23 @@ export default function OdourIncidentForm({
                 variant="outline"
                 size="sm"
                 onClick={geo.request}
-                disabled={geo.status === "requesting"}
+                disabled={geo.isRequesting}
               >
                 <MapPin className="w-4 h-4 mr-1" />
-                {geo.status === "requesting" ? "Getting location..." : "Use my location"}
+                {geo.isRequesting ? "Getting location..." : "Use my location"}
               </Button>
             </div>
             
             {effectivePosition ? (
               <p className="text-sm text-green-600">
                 📍 {effectivePosition.lat.toFixed(6)}, {effectivePosition.lng.toFixed(6)}
-                {geo.status === "granted" && !isValidClick && (
-                  <span className="text-muted-foreground"> (GPS ±{geo.coords?.accuracy?.toFixed(0) ?? 0}m)</span>
+                {geo.permission === "granted" && !isValidClick && geo.coords && (
+                  <span className="text-muted-foreground"> (GPS ±{geo.coords.accuracyMeters?.toFixed(0) ?? 0}m)</span>
                 )}
               </p>
             ) : (
               <p className="text-sm text-muted-foreground">
-                {geo.status === "requesting" ? "Getting GPS location..." : 
+                {geo.isRequesting ? "Getting GPS location..." : 
                  geo.error ? geo.error : 
                  "Click 'Use my location' to set GPS coordinates"}
               </p>

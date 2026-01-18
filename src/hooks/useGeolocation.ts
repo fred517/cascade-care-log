@@ -1,84 +1,117 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-type GeoState =
-  | { status: "idle"; coords: null; error: null }
-  | { status: "requesting"; coords: null; error: null }
-  | { status: "granted"; coords: { lat: number; lng: number; accuracy?: number }; error: null }
-  | { status: "denied"; coords: null; error: string }
-  | { status: "error"; coords: null; error: string };
+type GeoPermissionState = "granted" | "denied" | "prompt" | "unsupported" | "unknown";
+
+export type GeoCoords = { lat: number; lng: number; accuracyMeters?: number };
 
 export function useGeolocation() {
-  const [state, setState] = useState<GeoState>({
-    status: "idle",
-    coords: null,
-    error: null,
-  });
+  const [permission, setPermission] = useState<GeoPermissionState>("unknown");
+  const [coords, setCoords] = useState<GeoCoords | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isRequesting, setIsRequesting] = useState(false);
 
-  const inFlight = useRef(false);
+  const mountedRef = useRef(true);
 
-  const request = useCallback(() => {
-    if (inFlight.current) return;
-    inFlight.current = true;
-
-    // Hard blockers: no API or not secure
-    if (typeof window === "undefined" || !navigator.geolocation) {
-      setState({ status: "error", coords: null, error: "Geolocation not supported by this browser." });
-      inFlight.current = false;
-      return;
-    }
-
-    if (!window.isSecureContext) {
-      setState({
-        status: "error",
-        coords: null,
-        error: "Geolocation requires HTTPS (secure context).",
-      });
-      inFlight.current = false;
-      return;
-    }
-
-    setState({ status: "requesting", coords: null, error: null });
-
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const lat = pos.coords.latitude;
-        const lng = pos.coords.longitude;
-        if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-          setState({ status: "error", coords: null, error: "Browser returned invalid coordinates." });
-        } else {
-          setState({
-            status: "granted",
-            coords: { lat, lng, accuracy: pos.coords.accuracy },
-            error: null,
-          });
-        }
-        inFlight.current = false;
-      },
-      (err) => {
-        // Surface the real reason, not "no GPS"
-        const msg =
-          err.code === err.PERMISSION_DENIED
-            ? "Location permission denied. Enable it in browser site settings."
-            : err.code === err.POSITION_UNAVAILABLE
-              ? "Location unavailable. Check GPS/Wi-Fi/cell signal."
-              : err.code === err.TIMEOUT
-                ? "Location request timed out. Try again or disable high accuracy."
-                : `Location error: ${err.message || "Unknown error"}`;
-        setState({ status: err.code === err.PERMISSION_DENIED ? "denied" : "error", coords: null, error: msg });
-        inFlight.current = false;
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 0,
-      }
-    );
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
   }, []);
 
-  // Optional: auto-request once on mount
+  // Best-effort permission detection (not supported everywhere)
   useEffect(() => {
-    request();
-  }, [request]);
+    let cancelled = false;
 
-  return { ...state, request };
+    async function checkPermission() {
+      try {
+        const p = await navigator.permissions?.query?.({ name: "geolocation" } as PermissionDescriptor);
+        if (!p) return;
+
+        if (cancelled) return;
+        setPermission(p.state as GeoPermissionState);
+
+        p.onchange = () => {
+          if (!mountedRef.current) return;
+          setPermission(p.state as GeoPermissionState);
+        };
+      } catch {
+        // Ignore, we'll just request and handle errors normally.
+      }
+    }
+
+    if (!("geolocation" in navigator)) {
+      setPermission("unsupported");
+      return;
+    }
+
+    checkPermission();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const request = useCallback(async () => {
+    if (!("geolocation" in navigator)) {
+      setPermission("unsupported");
+      setError("Geolocation is not supported on this device/browser.");
+      return null;
+    }
+
+    setIsRequesting(true);
+    setError(null);
+
+    const opts: PositionOptions = {
+      enableHighAccuracy: true,
+      timeout: 15000,
+      maximumAge: 30_000,
+    };
+
+    const result = await new Promise<GeoCoords | null>((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          if (!mountedRef.current) return resolve(null);
+          const next: GeoCoords = {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            accuracyMeters: pos.coords.accuracy,
+          };
+          setCoords(next);
+          setPermission("granted");
+          resolve(next);
+        },
+        (err) => {
+          if (!mountedRef.current) return resolve(null);
+
+          // Human-friendly error mapping
+          let msg = "Unable to get your location.";
+          if (err.code === err.PERMISSION_DENIED) {
+            msg =
+              "Location permission denied. Enable location access for this site in your browser settings, or pick the incident location on the map.";
+            setPermission("denied");
+          } else if (err.code === err.POSITION_UNAVAILABLE) {
+            msg =
+              "Location unavailable (GPS/network). Try again, move outdoors, or pick the incident location on the map.";
+          } else if (err.code === err.TIMEOUT) {
+            msg =
+              "Location request timed out. Try again, or pick the incident location on the map.";
+          }
+
+          setError(msg);
+          resolve(null);
+        },
+        opts
+      );
+    });
+
+    if (mountedRef.current) setIsRequesting(false);
+    return result;
+  }, []);
+
+  const value = useMemo(
+    () => ({ permission, coords, error, isRequesting, request }),
+    [permission, coords, error, isRequesting, request]
+  );
+
+  return value;
 }
