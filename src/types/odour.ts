@@ -13,11 +13,16 @@ export interface SiteMap {
   image_url: string;
   latitude: number | null;
   longitude: number | null;
-  /** Geographic bounds of the map image for coordinate transformation */
-  geo_bounds?: GeoBounds | null;
+  /** Geographic bounds from database columns */
+  geo_bounds_north: number | null;
+  geo_bounds_south: number | null;
+  geo_bounds_east: number | null;
+  geo_bounds_west: number | null;
   created_at: string;
   updated_at: string;
   created_by: string;
+  /** Computed geo_bounds for convenience */
+  geo_bounds?: GeoBounds | null;
 }
 
 export interface FacilitySitemap {

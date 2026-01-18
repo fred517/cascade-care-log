@@ -845,6 +845,10 @@ export type Database = {
           created_at: string
           created_by: string
           description: string | null
+          geo_bounds_east: number | null
+          geo_bounds_north: number | null
+          geo_bounds_south: number | null
+          geo_bounds_west: number | null
           id: string
           image_url: string
           latitude: number | null
@@ -857,6 +861,10 @@ export type Database = {
           created_at?: string
           created_by: string
           description?: string | null
+          geo_bounds_east?: number | null
+          geo_bounds_north?: number | null
+          geo_bounds_south?: number | null
+          geo_bounds_west?: number | null
           id?: string
           image_url: string
           latitude?: number | null
@@ -869,6 +877,10 @@ export type Database = {
           created_at?: string
           created_by?: string
           description?: string | null
+          geo_bounds_east?: number | null
+          geo_bounds_north?: number | null
+          geo_bounds_south?: number | null
+          geo_bounds_west?: number | null
           id?: string
           image_url?: string
           latitude?: number | null
