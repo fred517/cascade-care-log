@@ -89,6 +89,7 @@ export function useCreateOdourIncident() {
 
   return useMutation({
     mutationFn: async (incident: {
+      org_id?: string;
       site_id: string;
       lat: number;
       lng: number;
@@ -105,8 +106,8 @@ export function useCreateOdourIncident() {
       const { data, error } = await supabase
         .from('odour_incidents')
         .insert({
+          org_id: incident.org_id ?? null,
           site_id: incident.site_id,
-          facility_id: incident.site_id, // Keep facility_id for backward compat (same as site_id)
           lat: incident.lat,
           lng: incident.lng,
           intensity: incident.intensity ?? null,
