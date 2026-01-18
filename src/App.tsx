@@ -15,7 +15,7 @@ import Reports from "./pages/Reports";
 import Auth from "./pages/Auth";
 import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
-import OdourMap from "./pages/OdourMap";
+import OdourMap from "./features/odourMap/OdourMapPage";
 import Organizations from "./pages/Organizations";
 
 const queryClient = new QueryClient();
