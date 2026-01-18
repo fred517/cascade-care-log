@@ -89,36 +89,87 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
     return 'bg-orange-500';
   };
 
-  // Convert lat/lng to approximate x/y percentages for display
-  // This is a simplified approach - in production you'd use proper geo transformation
-  const getIncidentPosition = (incident: OdourIncident) => {
-    // For now, use a simple hash-based position since we don't have proper geo bounds
-    const hash = incident.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    return {
-      x: 10 + (hash % 80),
-      y: 10 + ((hash * 7) % 80),
-    };
-  };
 
   const hasWeatherData = latestSnapshot && 
     latestSnapshot.wind_speed_mps !== null && 
     latestSnapshot.wind_direction_deg !== null &&
     latestSnapshot.stability_class;
 
-  // Convert GPS coords to map position (simplified - uses hash for demo)
-  // In production, you'd use proper geo bounds from the siteMap
-  const getGpsPosition = (): { x: number; y: number } | null => {
-    if (geo.status !== 'granted') return null;
-    // Simplified positioning - in production use actual geo bounds
-    const lat = geo.coords.lat;
-    const lng = geo.coords.lng;
-    // Use modulo to place within map bounds (demo approach)
-    const x = 20 + ((Math.abs(lng) * 1000) % 60);
-    const y = 20 + ((Math.abs(lat) * 1000) % 60);
-    return { x, y };
+  /**
+   * Convert lat/lng to map x/y percentages using geo bounds.
+   * Returns null if coordinates are outside bounds or bounds not defined.
+   */
+  const geoToMapPosition = (lat: number, lng: number): { x: number; y: number } | null => {
+    const bounds = siteMap.geo_bounds;
+    
+    if (!bounds) {
+      // Fallback: if we have a center point, estimate bounds (±0.005° ≈ 500m)
+      if (siteMap.latitude && siteMap.longitude) {
+        const estimatedBounds = {
+          north: siteMap.latitude + 0.005,
+          south: siteMap.latitude - 0.005,
+          east: siteMap.longitude + 0.007,
+          west: siteMap.longitude - 0.007,
+        };
+        return geoToMapPositionWithBounds(lat, lng, estimatedBounds);
+      }
+      return null;
+    }
+    
+    return geoToMapPositionWithBounds(lat, lng, bounds);
   };
 
-  const gpsPosition = getGpsPosition();
+  const geoToMapPositionWithBounds = (
+    lat: number, 
+    lng: number, 
+    bounds: { north: number; south: number; east: number; west: number }
+  ): { x: number; y: number } | null => {
+    const { north, south, east, west } = bounds;
+    
+    // Check if point is within bounds (with small margin)
+    const margin = 0.1; // 10% margin outside bounds
+    const latRange = north - south;
+    const lngRange = east - west;
+    
+    if (
+      lat < south - latRange * margin || 
+      lat > north + latRange * margin ||
+      lng < west - lngRange * margin || 
+      lng > east + lngRange * margin
+    ) {
+      return null; // Outside visible area
+    }
+    
+    // Convert to percentage (0-100)
+    // X: west=0%, east=100%
+    // Y: north=0%, south=100% (inverted because Y increases downward)
+    const x = ((lng - west) / lngRange) * 100;
+    const y = ((north - lat) / latRange) * 100;
+    
+    // Clamp to 0-100
+    return {
+      x: Math.max(0, Math.min(100, x)),
+      y: Math.max(0, Math.min(100, y)),
+    };
+  };
+
+  // Get GPS position on map
+  const gpsPosition = geo.status === 'granted' 
+    ? geoToMapPosition(geo.coords.lat, geo.coords.lng)
+    : null;
+
+  // Convert incident lat/lng to map position
+  const getIncidentPosition = (incident: OdourIncident): { x: number; y: number } => {
+    const pos = geoToMapPosition(incident.lat, incident.lng);
+    if (pos) return pos;
+    
+    // Fallback to hash-based position if no geo bounds
+    const hash = incident.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    return {
+      x: 10 + (hash % 80),
+      y: 10 + ((hash * 7) % 80),
+    };
+  };
 
   // Get source position for rendering
   const getSourcePosition = (source: OdourSource): { x: number; y: number } | null => {
