@@ -13,7 +13,7 @@ import {
 } from 'recharts';
 import { Reading, Threshold, PARAMETERS, ParameterKey, getDefaultThresholds } from '@/types/wastewater';
 import { format } from 'date-fns';
-
+import { useIsMobile } from '@/hooks/use-mobile';
 interface MetricChartProps {
   metricId: ParameterKey;
   readings: Reading[];
@@ -31,7 +31,7 @@ export function MetricChart({
 }: MetricChartProps) {
   const param = PARAMETERS[metricId];
   const defaults = getDefaultThresholds(param);
-
+  const isMobile = useIsMobile();
   const chartData = useMemo(() => {
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - days);
@@ -104,9 +104,12 @@ export function MetricChart({
   }
 
   return (
-    <div className="h-64 min-w-0 overflow-hidden">
+    <div className="h-64 w-full min-w-0 overflow-hidden [&_.recharts-responsive-container]:min-w-0 [&_.recharts-wrapper]:overflow-hidden [&_.recharts-surface]:overflow-hidden">
       <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={chartData} margin={{ top: 10, right: 5, left: -10, bottom: 0 }}>
+        <ComposedChart
+          data={chartData}
+          margin={{ top: 10, right: isMobile ? 6 : 10, left: isMobile ? 6 : 0, bottom: isMobile ? 12 : 0 }}
+        >
           <defs>
             <linearGradient id={`gradient-${metricId}`} x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
@@ -124,15 +127,19 @@ export function MetricChart({
             dataKey="date"
             tickFormatter={(date) => format(new Date(date), 'M/d')}
             stroke="hsl(var(--muted-foreground))"
-            fontSize={11}
+            fontSize={isMobile ? 10 : 11}
+            tickMargin={8}
+            minTickGap={isMobile ? 18 : 24}
             tickLine={false}
             axisLine={false}
           />
           
           <YAxis 
             domain={domain}
+            width={isMobile ? 36 : 44}
             stroke="hsl(var(--muted-foreground))"
-            fontSize={11}
+            fontSize={isMobile ? 10 : 11}
+            tickMargin={8}
             tickLine={false}
             axisLine={false}
             tickFormatter={(value) => value.toFixed(param.decimals > 0 ? 1 : 0)}
@@ -147,23 +154,31 @@ export function MetricChart({
                 y={threshold?.max ?? defaults.max} 
                 stroke="hsl(var(--status-warning))" 
                 strokeDasharray="5 5"
-                label={{ 
-                  value: 'Max', 
-                  position: 'right',
-                  fill: 'hsl(var(--status-warning))',
-                  fontSize: 10
-                }}
+                label={
+                  isMobile
+                    ? undefined
+                    : {
+                        value: 'Max',
+                        position: 'right',
+                        fill: 'hsl(var(--status-warning))',
+                        fontSize: 10,
+                      }
+                }
               />
               <ReferenceLine 
                 y={threshold?.min ?? defaults.min} 
                 stroke="hsl(var(--status-warning))" 
                 strokeDasharray="5 5"
-                label={{ 
-                  value: 'Min', 
-                  position: 'right',
-                  fill: 'hsl(var(--status-warning))',
-                  fontSize: 10
-                }}
+                label={
+                  isMobile
+                    ? undefined
+                    : {
+                        value: 'Min',
+                        position: 'right',
+                        fill: 'hsl(var(--status-warning))',
+                        fontSize: 10,
+                      }
+                }
               />
             </>
           )}
