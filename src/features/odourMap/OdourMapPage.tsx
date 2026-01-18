@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { MapContainer, Marker, Popup, TileLayer, useMapEvents } from "react-leaflet";
 import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 
 import { useGeolocation } from "@/hooks/useGeolocation";
 import { listIncidents, type OdourIncident } from "@/features/odourMap/odourIncidents";
