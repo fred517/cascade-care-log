@@ -392,7 +392,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           description: string | null
-          facility_id: string
+          facility_id: string | null
           humidity: number | null
           id: string
           intensity: number | null
@@ -400,7 +400,9 @@ export type Database = {
           lng: number
           notes: string | null
           occurred_at: string
+          org_id: string | null
           site_id: string | null
+          source: string | null
           temperature: number | null
           weather: Json | null
           wind_dir: number | null
@@ -411,7 +413,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           description?: string | null
-          facility_id: string
+          facility_id?: string | null
           humidity?: number | null
           id?: string
           intensity?: number | null
@@ -419,7 +421,9 @@ export type Database = {
           lng: number
           notes?: string | null
           occurred_at?: string
+          org_id?: string | null
           site_id?: string | null
+          source?: string | null
           temperature?: number | null
           weather?: Json | null
           wind_dir?: number | null
@@ -430,7 +434,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           description?: string | null
-          facility_id?: string
+          facility_id?: string | null
           humidity?: number | null
           id?: string
           intensity?: number | null
@@ -438,7 +442,9 @@ export type Database = {
           lng?: number
           notes?: string | null
           occurred_at?: string
+          org_id?: string | null
           site_id?: string | null
+          source?: string | null
           temperature?: number | null
           weather?: Json | null
           wind_dir?: number | null
@@ -845,6 +851,7 @@ export type Database = {
           created_at: string
           created_by: string
           description: string | null
+          file_name: string | null
           geo_bounds_east: number | null
           geo_bounds_north: number | null
           geo_bounds_south: number | null
@@ -853,14 +860,19 @@ export type Database = {
           image_url: string
           latitude: number | null
           longitude: number | null
+          mime_type: string | null
           name: string
+          org_id: string | null
           site_id: string
+          storage_bucket: string | null
+          storage_path: string | null
           updated_at: string
         }
         Insert: {
           created_at?: string
           created_by: string
           description?: string | null
+          file_name?: string | null
           geo_bounds_east?: number | null
           geo_bounds_north?: number | null
           geo_bounds_south?: number | null
@@ -869,14 +881,19 @@ export type Database = {
           image_url: string
           latitude?: number | null
           longitude?: number | null
+          mime_type?: string | null
           name: string
+          org_id?: string | null
           site_id: string
+          storage_bucket?: string | null
+          storage_path?: string | null
           updated_at?: string
         }
         Update: {
           created_at?: string
           created_by?: string
           description?: string | null
+          file_name?: string | null
           geo_bounds_east?: number | null
           geo_bounds_north?: number | null
           geo_bounds_south?: number | null
@@ -885,8 +902,12 @@ export type Database = {
           image_url?: string
           latitude?: number | null
           longitude?: number | null
+          mime_type?: string | null
           name?: string
+          org_id?: string | null
           site_id?: string
+          storage_bucket?: string | null
+          storage_path?: string | null
           updated_at?: string
         }
         Relationships: [
