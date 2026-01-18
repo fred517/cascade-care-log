@@ -1,3 +1,10 @@
+export interface GeoBounds {
+  north: number; // max latitude
+  south: number; // min latitude
+  east: number;  // max longitude
+  west: number;  // min longitude
+}
+
 export interface SiteMap {
   id: string;
   site_id: string;
@@ -6,6 +13,8 @@ export interface SiteMap {
   image_url: string;
   latitude: number | null;
   longitude: number | null;
+  /** Geographic bounds of the map image for coordinate transformation */
+  geo_bounds?: GeoBounds | null;
   created_at: string;
   updated_at: string;
   created_by: string;
