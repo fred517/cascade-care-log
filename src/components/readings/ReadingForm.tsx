@@ -1,10 +1,11 @@
 import React, { useMemo, useState, useRef } from "react";
 import { PARAMETER_LIST, ParameterKey } from "@/lib/parameters";
 import { evaluateReadings, Reading as EvalReading, Evaluation } from "@/lib/evaluate";
-import { Reading as WastewaterReading, Threshold } from "@/types/wastewater";
+import { Reading as WastewaterReading, Threshold, PARAMETERS } from "@/types/wastewater";
 import { cn } from "@/lib/utils";
-import { AlertTriangle, AlertCircle, Paperclip, X, FileText, Loader2, MessageSquare } from "lucide-react";
+import { AlertTriangle, AlertCircle, Paperclip, X, FileText, Loader2, MessageSquare, BookOpen, ChevronDown, ChevronRight, ArrowDown, ArrowUp, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
+import { usePlaybooks } from "@/hooks/usePlaybooks";
 
 interface AttachmentInfo {
   file: File;
@@ -19,6 +20,8 @@ interface ReadingFormProps {
 }
 
 export function ReadingForm({ onSubmit, thresholds = [], onUploadFile }: ReadingFormProps) {
+  const { getPlaybook, loading: playbooksLoading } = usePlaybooks();
+  
   const [values, setValues] = useState<Record<ParameterKey, string>>(() => {
     const init: Record<string, string> = {};
     for (const p of PARAMETER_LIST) init[p.key] = "";
@@ -38,6 +41,7 @@ export function ReadingForm({ onSubmit, thresholds = [], onUploadFile }: Reading
   });
 
   const [expandedNotes, setExpandedNotes] = useState<Set<ParameterKey>>(new Set());
+  const [expandedPlaybooks, setExpandedPlaybooks] = useState<Set<string>>(new Set());
   const [uploadingMetric, setUploadingMetric] = useState<ParameterKey | null>(null);
   const fileInputRefs = useRef<Record<ParameterKey, HTMLInputElement | null>>({} as Record<ParameterKey, HTMLInputElement | null>);
 
@@ -55,6 +59,55 @@ export function ReadingForm({ onSubmit, thresholds = [], onUploadFile }: Reading
   const alarms = evaluations.filter(e => e.severity === "alarm");
   const watches = evaluations.filter(e => e.severity === "watch");
   const enteredCount = evalReadings.filter(r => r.value !== null).length;
+
+  // Get playbooks for breached parameters
+  const getBreachPlaybooks = useMemo(() => {
+    const breaches: Array<{
+      key: ParameterKey;
+      severity: 'alarm' | 'watch';
+      condition: 'low' | 'high';
+      value: number;
+      playbook: any;
+    }> = [];
+
+    [...alarms, ...watches].forEach(evaluation => {
+      const param = PARAMETERS[evaluation.key];
+      const value = Number(values[evaluation.key]);
+      
+      // Determine if it's a low or high breach
+      let condition: 'low' | 'high' = 'high';
+      if (param.alarm?.min !== undefined && value < param.alarm.min) {
+        condition = 'low';
+      } else if (param.watch?.min !== undefined && value < param.watch.min) {
+        condition = 'low';
+      }
+
+      const playbook = getPlaybook(evaluation.key, condition);
+      if (playbook) {
+        breaches.push({
+          key: evaluation.key,
+          severity: evaluation.severity as 'alarm' | 'watch',
+          condition,
+          value,
+          playbook,
+        });
+      }
+    });
+
+    return breaches;
+  }, [alarms, watches, values, getPlaybook]);
+
+  const togglePlaybook = (key: string) => {
+    setExpandedPlaybooks(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
 
   function handleChange(key: ParameterKey, next: string) {
     if (next === '' || /^-?\d*\.?\d*$/.test(next)) {
@@ -187,9 +240,16 @@ export function ReadingForm({ onSubmit, thresholds = [], onUploadFile }: Reading
         </span>
       </div>
 
-      {/* Alert Panel */}
+      {/* Alert Panel with Playbooks */}
       {(alarms.length > 0 || watches.length > 0) && (
-        <AlertPanel alarms={alarms} watches={watches} />
+        <AlertPanelWithPlaybooks 
+          alarms={alarms} 
+          watches={watches} 
+          breachPlaybooks={getBreachPlaybooks}
+          expandedPlaybooks={expandedPlaybooks}
+          onTogglePlaybook={togglePlaybook}
+          loading={playbooksLoading}
+        />
       )}
 
       {/* Parameter Grid */}
@@ -346,6 +406,240 @@ export function ReadingForm({ onSubmit, thresholds = [], onUploadFile }: Reading
   );
 }
 
+interface BreachPlaybook {
+  key: ParameterKey;
+  severity: 'alarm' | 'watch';
+  condition: 'low' | 'high';
+  value: number;
+  playbook: any;
+}
+
+interface AlertPanelWithPlaybooksProps {
+  alarms: Evaluation[];
+  watches: Evaluation[];
+  breachPlaybooks: BreachPlaybook[];
+  expandedPlaybooks: Set<string>;
+  onTogglePlaybook: (key: string) => void;
+  loading: boolean;
+}
+
+function AlertPanelWithPlaybooks({ 
+  alarms, 
+  watches, 
+  breachPlaybooks, 
+  expandedPlaybooks, 
+  onTogglePlaybook,
+  loading 
+}: AlertPanelWithPlaybooksProps) {
+  return (
+    <div className="border border-border rounded-xl p-4 bg-card space-y-4">
+      {alarms.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 font-bold text-status-critical mb-3">
+            <AlertCircle className="w-5 h-5" />
+            <span>Alarms ({alarms.length})</span>
+            <span className="text-xs font-normal bg-status-critical/20 px-2 py-0.5 rounded-full">
+              Immediate action required
+            </span>
+          </div>
+          <div className="space-y-3">
+            {alarms.map(a => {
+              const breach = breachPlaybooks.find(b => b.key === a.key);
+              const playbookKey = `${a.key}-${breach?.condition || 'high'}`;
+              const isExpanded = expandedPlaybooks.has(playbookKey);
+              
+              return (
+                <AlertItemWithPlaybook
+                  key={a.key}
+                  evaluation={a}
+                  breach={breach}
+                  isExpanded={isExpanded}
+                  onToggle={() => onTogglePlaybook(playbookKey)}
+                  loading={loading}
+                />
+              );
+            })}
+          </div>
+        </div>
+      )}
+      
+      {watches.length > 0 && (
+        <div className={alarms.length > 0 ? "pt-4 border-t border-border" : ""}>
+          <div className="flex items-center gap-2 font-bold text-status-warning mb-3">
+            <AlertTriangle className="w-5 h-5" />
+            <span>Watches ({watches.length})</span>
+            <span className="text-xs font-normal bg-status-warning/20 px-2 py-0.5 rounded-full">
+              Monitor closely
+            </span>
+          </div>
+          <div className="space-y-3">
+            {watches.map(w => {
+              const breach = breachPlaybooks.find(b => b.key === w.key);
+              const playbookKey = `${w.key}-${breach?.condition || 'high'}`;
+              const isExpanded = expandedPlaybooks.has(playbookKey);
+              
+              return (
+                <AlertItemWithPlaybook
+                  key={w.key}
+                  evaluation={w}
+                  breach={breach}
+                  isExpanded={isExpanded}
+                  onToggle={() => onTogglePlaybook(playbookKey)}
+                  loading={loading}
+                />
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface AlertItemProps {
+  evaluation: Evaluation;
+  breach?: BreachPlaybook;
+  isExpanded: boolean;
+  onToggle: () => void;
+  loading: boolean;
+}
+
+function AlertItemWithPlaybook({ evaluation, breach, isExpanded, onToggle, loading }: AlertItemProps) {
+  const playbook = breach?.playbook;
+  const hasPlaybook = playbook && playbook.steps && playbook.steps.length > 0;
+  const isAlarm = evaluation.severity === 'alarm';
+  
+  return (
+    <div className={cn(
+      "rounded-lg border overflow-hidden",
+      isAlarm 
+        ? "border-status-critical/30 bg-status-critical/5" 
+        : "border-status-warning/30 bg-status-warning/5"
+    )}>
+      {/* Header */}
+      <div className="p-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex-1">
+            <div className="font-semibold text-foreground text-sm">{evaluation.message}</div>
+            {breach && (
+              <div className="flex items-center gap-2 mt-1.5">
+                <span className={cn(
+                  "inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded",
+                  breach.condition === 'low'
+                    ? "bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300"
+                    : "bg-orange-100 text-orange-700 dark:bg-orange-950/50 dark:text-orange-300"
+                )}>
+                  {breach.condition === 'low' ? (
+                    <ArrowDown className="w-3 h-3" />
+                  ) : (
+                    <ArrowUp className="w-3 h-3" />
+                  )}
+                  {breach.condition === 'low' ? 'Below minimum' : 'Above maximum'}
+                </span>
+              </div>
+            )}
+          </div>
+          
+          {hasPlaybook && !loading && (
+            <button
+              onClick={onToggle}
+              className={cn(
+                "flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg transition-colors",
+                isAlarm
+                  ? "bg-status-critical/20 text-status-critical hover:bg-status-critical/30"
+                  : "bg-status-warning/20 text-status-warning hover:bg-status-warning/30"
+              )}
+            >
+              <BookOpen className="w-3.5 h-3.5" />
+              <span>{isExpanded ? 'Hide' : 'View'} Playbook</span>
+              {isExpanded ? (
+                <ChevronDown className="w-3 h-3" />
+              ) : (
+                <ChevronRight className="w-3 h-3" />
+              )}
+            </button>
+          )}
+        </div>
+      </div>
+      
+      {/* Expanded Playbook */}
+      {isExpanded && hasPlaybook && (
+        <div className={cn(
+          "border-t p-4",
+          isAlarm 
+            ? "border-status-critical/20 bg-status-critical/10" 
+            : "border-status-warning/20 bg-status-warning/10"
+        )}>
+          <div className="flex items-center gap-2 mb-3">
+            <BookOpen className={cn(
+              "w-4 h-4",
+              isAlarm ? "text-status-critical" : "text-status-warning"
+            )} />
+            <span className="font-semibold text-foreground text-sm">{playbook.title}</span>
+          </div>
+          
+          <ol className="space-y-2">
+            {playbook.steps.map((step: string, index: number) => (
+              <li key={index} className="flex items-start gap-3">
+                <span className={cn(
+                  "w-5 h-5 rounded-full text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5",
+                  isAlarm 
+                    ? "bg-status-critical/30 text-status-critical" 
+                    : "bg-status-warning/30 text-status-warning"
+                )}>
+                  {index + 1}
+                </span>
+                <span className="text-sm text-foreground">{step}</span>
+              </li>
+            ))}
+          </ol>
+          
+          {playbook.referenceLinks && playbook.referenceLinks.length > 0 && (
+            <div className="mt-4 pt-3 border-t border-border/50">
+              <p className="text-xs text-muted-foreground mb-1.5">References:</p>
+              <div className="flex flex-wrap gap-2">
+                {playbook.referenceLinks.map((ref: string, i: number) => (
+                  <span 
+                    key={i} 
+                    className="text-xs bg-muted/50 text-muted-foreground px-2 py-1 rounded"
+                  >
+                    📄 {ref}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          
+          <div className="mt-4 pt-3 border-t border-border/50 flex items-center gap-2 text-xs text-muted-foreground">
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            <span>Complete these steps before submitting to ensure proper response</span>
+          </div>
+        </div>
+      )}
+      
+      {/* Quick actions preview when collapsed */}
+      {!isExpanded && evaluation.actions.length > 0 && (
+        <div className="px-3 pb-3">
+          <ul className="text-xs text-muted-foreground space-y-1">
+            {evaluation.actions.slice(0, 2).map((action, i) => (
+              <li key={i} className="flex items-start gap-1.5">
+                <span className="text-muted-foreground/50">•</span>
+                <span className="line-clamp-1">{action}</span>
+              </li>
+            ))}
+            {evaluation.actions.length > 2 && (
+              <li className="text-muted-foreground/70 ml-3">
+                +{evaluation.actions.length - 2} more steps...
+              </li>
+            )}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Keep legacy AlertPanel for backwards compatibility
 function AlertPanel({ alarms, watches }: { alarms: Evaluation[]; watches: Evaluation[] }) {
   return (
     <div className="border border-border rounded-xl p-4 bg-card space-y-4">
