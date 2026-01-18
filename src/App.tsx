@@ -21,6 +21,7 @@ import EnvironmentMonitor from "./pages/EnvironmentMonitor";
 
 const queryClient = new QueryClient();
 
+// Main App component
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
