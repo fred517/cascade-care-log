@@ -33,6 +33,7 @@ function ClickPicker(props: { onPick: (lat: number, lng: number) => void }) {
 export function OdourMapPage() {
   const { site } = useSite();
   const siteId = site?.id;
+  const orgId = site?.org_id;
   const { user } = useAuth();
   const geo = useGeolocation();
   const createIncidentMutation = useCreateOdourIncident();
@@ -58,7 +59,7 @@ export function OdourMapPage() {
 
   // Load persisted site map + incidents
   useEffect(() => {
-    if (!siteId) return;
+    if (!siteId || !orgId) return;
     let cancelled = false;
 
     async function load() {
@@ -66,14 +67,14 @@ export function OdourMapPage() {
         setLoading(true);
 
         // Load map
-        const { record } = await loadSiteMap({ siteId });
+        const { record, signedUrl } = await loadSiteMap({ orgId: orgId!, siteId: siteId! });
         if (!cancelled && record) {
-          setSiteMapUrl(record.image_url);
+          setSiteMapUrl(signedUrl ?? record.image_url);
           setSiteMapName(record.name ?? null);
         }
 
         // Load incidents
-        const list = await listIncidents({ siteId });
+        const list = await listIncidents({ orgId: orgId!, siteId: siteId! });
         if (!cancelled) setIncidents(list);
       } catch (e: unknown) {
         console.error(e);
@@ -86,13 +87,13 @@ export function OdourMapPage() {
     return () => {
       cancelled = true;
     };
-  }, [siteId]);
+  }, [siteId, orgId]);
 
   async function onUploadMap(file: File) {
-    if (!siteId || !user?.id) return;
+    if (!siteId || !orgId || !user?.id) return;
     setSavingMap(true);
     try {
-      const rec = await uploadSiteMap({ siteId, createdBy: user.id, file });
+      const rec = await uploadSiteMap({ orgId, siteId, createdBy: user.id, file });
       setSiteMapUrl(rec.image_url);
       setSiteMapName(rec.name);
     } catch (e: unknown) {
@@ -113,11 +114,12 @@ export function OdourMapPage() {
   }
 
   async function submitIncident() {
-    if (!draftReady || !siteId) return;
+    if (!draftReady || !siteId || !orgId) return;
 
     setCreating(true);
     try {
       await createIncidentMutation.mutateAsync({
+        org_id: orgId,
         site_id: siteId,
         occurred_at: new Date(occurredAt).toISOString(),
         lat: draftLat!,
@@ -127,7 +129,7 @@ export function OdourMapPage() {
       });
 
       // Refresh incidents list
-      const list = await listIncidents({ siteId });
+      const list = await listIncidents({ orgId, siteId });
       setIncidents(list);
 
       // Reset draft
