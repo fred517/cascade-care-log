@@ -107,6 +107,7 @@ export default function Trends() {
               readings={mockReadings}
               threshold={mockThresholds.find(t => t.metricId === selectedMetric)}
               days={selectedRange}
+              containerClassName="h-full"
             />
           </div>
         </div>
@@ -151,6 +152,7 @@ export default function Trends() {
                     threshold={threshold}
                     days={7}
                     showThresholdBands={false}
+                    containerClassName="h-full"
                   />
                 </div>
               </div>

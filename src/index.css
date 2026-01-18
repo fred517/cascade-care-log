@@ -163,6 +163,18 @@
     @apply backdrop-blur-md bg-card/80 border border-border/50 rounded-xl;
   }
 
+  /* Ensures Recharts SVG never draws outside its card on mobile */
+  .chart-clip {
+    @apply relative min-w-0 overflow-hidden;
+    contain: layout paint;
+  }
+
+  .chart-clip .recharts-wrapper,
+  .chart-clip .recharts-responsive-container,
+  .chart-clip svg.recharts-surface {
+    overflow: hidden !important;
+  }
+
   .input-field {
     @apply w-full px-4 py-3 rounded-lg bg-input border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all duration-200;
   }
