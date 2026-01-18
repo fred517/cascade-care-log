@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { format } from 'date-fns';
-import { Check, X, Clock, UserCheck, Users, Loader2 } from 'lucide-react';
+import { Check, X, Clock, UserCheck, Users, Loader2, Mail, RotateCw } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -127,7 +127,37 @@ export default function UserApproval() {
     },
   });
 
-  if (isLoading) {
+  const [resendingUserId, setResendingUserId] = useState<string | null>(null);
+
+  const resendWelcomeEmail = async (approvedUser: PendingUser) => {
+    setResendingUserId(approvedUser.user_id);
+    try {
+      const { error } = await supabase.functions.invoke('send-welcome-email', {
+        body: {
+          userId: approvedUser.user_id,
+          email: approvedUser.email,
+          firstName: approvedUser.first_name || approvedUser.display_name?.split(' ')[0] || '',
+        },
+      });
+
+      if (error) throw error;
+      
+      toast({ 
+        title: 'Welcome Email Sent', 
+        description: `Password setup link sent to ${approvedUser.email}` 
+      });
+    } catch (error: any) {
+      console.error('Failed to resend welcome email:', error);
+      toast({ 
+        title: 'Error', 
+        description: 'Failed to send welcome email. Please try again.',
+        variant: 'destructive'
+      });
+    } finally {
+      setResendingUserId(null);
+    }
+  };
+
     return (
       <Card>
         <CardContent className="flex items-center justify-center py-12">
@@ -262,14 +292,39 @@ export default function UserApproval() {
                 >
                   <div className="min-w-0 flex-1">
                     <p className="font-medium text-foreground truncate">
-                      {approvedUser.display_name || 'No name'}
+                      {approvedUser.first_name && approvedUser.surname 
+                        ? `${approvedUser.first_name} ${approvedUser.surname}`
+                        : approvedUser.display_name || 'No name'}
                     </p>
                     <p className="text-sm text-muted-foreground truncate">{approvedUser.email}</p>
+                    {approvedUser.facility_name && (
+                      <p className="text-xs text-muted-foreground truncate">
+                        {approvedUser.facility_name}
+                      </p>
+                    )}
                   </div>
-                  <Badge variant="secondary" className="bg-green-500/10 text-green-700">
-                    <Check className="w-3 h-3 mr-1" />
-                    Approved
-                  </Badge>
+                  <div className="flex items-center gap-2 ml-4">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => resendWelcomeEmail(approvedUser)}
+                      disabled={resendingUserId === approvedUser.user_id}
+                      className="text-xs"
+                    >
+                      {resendingUserId === approvedUser.user_id ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <>
+                          <Mail className="w-3 h-3 mr-1" />
+                          Resend
+                        </>
+                      )}
+                    </Button>
+                    <Badge variant="secondary" className="bg-green-500/10 text-green-700">
+                      <Check className="w-3 h-3 mr-1" />
+                      Approved
+                    </Badge>
+                  </div>
                 </div>
               ))}
             </div>
