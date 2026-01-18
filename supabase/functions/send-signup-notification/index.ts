@@ -33,8 +33,8 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log(`New signup notification for: ${email} (${userId})`);
 
-    // Use the production URL for approval link
-    const approvalUrl = "https://waterops.lovable.app/settings";
+    // Use the production URL for approval link - now points to Organizations page
+    const approvalUrl = "https://waterops.lovable.app/organizations";
 
     const html = `
       <!DOCTYPE html>
