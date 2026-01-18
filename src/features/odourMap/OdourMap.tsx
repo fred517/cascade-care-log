@@ -7,8 +7,10 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { useAuth } from "@/hooks/useAuth";
 import { useSite } from "@/hooks/useSite";
 import { useGeolocation } from "@/hooks/useGeolocation";
+import { useRealtimeWeather } from "@/hooks/useRealtimeWeather";
 import { loadSiteMap, uploadSiteMap } from "@/features/odourMap/siteMapStorage";
 import { createIncident, listIncidents, type OdourIncident } from "@/features/odourMap/odourIncidents";
+import { Cloud, Droplets, Eye, Thermometer, Wind } from "lucide-react";
 
 import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerIcon from "leaflet/dist/images/marker-icon.png";
@@ -33,6 +35,7 @@ export function OdourMap() {
   const { profile } = useAuth();
   const { site, loading: siteLoading } = useSite();
   const geo = useGeolocation();
+  const { weather, loading: weatherLoading, error: weatherError, fetchWeather } = useRealtimeWeather();
 
   // Get orgId from site (preferred) or profile as fallback
   const orgId = site?.org_id || (profile as any)?.org_id;
@@ -87,6 +90,13 @@ export function OdourMap() {
       cancelled = true;
     };
   }, [orgId, siteId]);
+
+  // Fetch weather when we have a center location
+  useEffect(() => {
+    const lat = draftLat ?? incidents[0]?.lat ?? -27.4698;
+    const lng = draftLng ?? incidents[0]?.lng ?? 153.0251;
+    fetchWeather(lat, lng);
+  }, [siteId]); // Fetch once when site loads
 
   const center = useMemo(() => {
     if (draftLat != null && draftLng != null) return [draftLat, draftLng] as [number, number];
@@ -195,6 +205,95 @@ export function OdourMap() {
               <img src={siteMapUrl} alt="Site map" className="w-full object-contain" />
             </div>
           ) : null}
+        </div>
+
+        {/* Real-time Weather Panel */}
+        <div className="rounded-xl border bg-card p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-lg font-semibold flex items-center gap-2">
+              <Cloud className="h-5 w-5" />
+              Current Weather
+            </h2>
+            <button
+              onClick={() => {
+                const lat = draftLat ?? incidents[0]?.lat ?? -27.4698;
+                const lng = draftLng ?? incidents[0]?.lng ?? 153.0251;
+                fetchWeather(lat, lng);
+              }}
+              disabled={weatherLoading}
+              className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
+            >
+              {weatherLoading ? "Refreshing..." : "↻ Refresh"}
+            </button>
+          </div>
+
+          {weatherError && (
+            <div className="text-sm text-destructive mb-2">{weatherError}</div>
+          )}
+
+          {weather ? (
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              <div className="flex items-center gap-2 rounded-lg bg-muted/50 p-3">
+                <Thermometer className="h-5 w-5 text-orange-500" />
+                <div>
+                  <div className="text-xs text-muted-foreground">Temperature</div>
+                  <div className="font-semibold">{weather.temperature.toFixed(1)}°C</div>
+                  <div className="text-xs text-muted-foreground">
+                    Feels like {weather.feels_like.toFixed(1)}°C
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 rounded-lg bg-muted/50 p-3">
+                <Wind className="h-5 w-5 text-blue-500" />
+                <div>
+                  <div className="text-xs text-muted-foreground">Wind</div>
+                  <div className="font-semibold">{weather.wind_speed.toFixed(1)} m/s</div>
+                  <div className="text-xs text-muted-foreground">
+                    {weather.wind_direction_text} ({weather.wind_direction}°)
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 rounded-lg bg-muted/50 p-3">
+                <Droplets className="h-5 w-5 text-cyan-500" />
+                <div>
+                  <div className="text-xs text-muted-foreground">Humidity</div>
+                  <div className="font-semibold">{weather.humidity}%</div>
+                  <div className="text-xs text-muted-foreground">
+                    {weather.pressure} hPa
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 rounded-lg bg-muted/50 p-3">
+                <Eye className="h-5 w-5 text-gray-500" />
+                <div>
+                  <div className="text-xs text-muted-foreground">Visibility</div>
+                  <div className="font-semibold">{weather.visibility.toFixed(1)} km</div>
+                  <div className="text-xs text-muted-foreground">
+                    Clouds: {weather.clouds}%
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 rounded-lg bg-muted/50 p-3">
+                <img
+                  src={`https://openweathermap.org/img/wn/${weather.weather_icon}@2x.png`}
+                  alt={weather.weather_description}
+                  className="h-10 w-10"
+                />
+                <div>
+                  <div className="text-xs text-muted-foreground">Conditions</div>
+                  <div className="font-semibold capitalize">{weather.weather_description}</div>
+                </div>
+              </div>
+            </div>
+          ) : weatherLoading ? (
+            <div className="text-sm text-muted-foreground">Loading weather data...</div>
+          ) : (
+            <div className="text-sm text-muted-foreground">No weather data available</div>
+          )}
         </div>
 
         <div className="grid gap-6 lg:grid-cols-3">
