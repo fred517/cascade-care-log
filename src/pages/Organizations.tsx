@@ -306,6 +306,61 @@ export default function Organizations() {
 
     setApprovingUser(true);
     try {
+      const facilityName = selectedPendingUser.facility_name?.trim();
+      let createdSiteId: string | null = null;
+      let createdOrgId: string | null = null;
+
+      // If facility name is provided, create organization and site automatically
+      if (facilityName) {
+        // Create organization with the facility name
+        const { data: newOrg, error: orgError } = await supabase
+          .from('organizations')
+          .insert({ name: facilityName })
+          .select()
+          .single();
+
+        if (orgError) throw orgError;
+        createdOrgId = newOrg.id;
+
+        // Add the approved user as owner of the organization
+        const { error: orgMemberError } = await supabase
+          .from('org_members')
+          .insert({
+            org_id: newOrg.id,
+            user_id: selectedPendingUser.user_id,
+            role: 'owner',
+          });
+
+        if (orgMemberError) throw orgMemberError;
+
+        // Create a site under this organization with the same name
+        const { data: newSite, error: siteError } = await supabase
+          .from('sites')
+          .insert({
+            name: facilityName,
+            org_id: newOrg.id,
+          })
+          .select()
+          .single();
+
+        if (siteError) throw siteError;
+        createdSiteId = newSite.id;
+
+        // Add user to the site as admin
+        const { error: siteMemberError } = await supabase
+          .from('site_members')
+          .insert({
+            user_id: selectedPendingUser.user_id,
+            site_id: newSite.id,
+            role: 'admin',
+          });
+
+        if (siteMemberError) throw siteMemberError;
+      }
+
+      // Use the created site or the manually selected site
+      const finalSiteId = createdSiteId || selectedSiteId || null;
+
       // Update the profile to approved
       const { error } = await supabase
         .from('profiles')
@@ -313,7 +368,7 @@ export default function Organizations() {
           is_approved: true,
           approved_by: user?.id,
           approved_at: new Date().toISOString(),
-          site_id: selectedSiteId || null,
+          site_id: finalSiteId,
         })
         .eq('user_id', selectedPendingUser.user_id);
 
@@ -326,8 +381,8 @@ export default function Organizations() {
         .eq('user_id', selectedPendingUser.user_id)
         .eq('site_id', '00000000-0000-0000-0000-000000000001');
 
-      // Add to selected site
-      if (selectedSiteId) {
+      // If no org was created but a site was selected, add user to that site
+      if (!createdSiteId && selectedSiteId) {
         await supabase
           .from('site_members')
           .upsert({
@@ -336,6 +391,14 @@ export default function Organizations() {
             role: 'operator',
           }, { onConflict: 'user_id,site_id' });
       }
+
+      // Assign default operator role in user_roles table
+      await supabase
+        .from('user_roles')
+        .upsert({
+          user_id: selectedPendingUser.user_id,
+          role: 'operator',
+        }, { onConflict: 'user_id' });
 
       // Send welcome email
       await supabase.functions.invoke('send-welcome-email', {
@@ -346,12 +409,18 @@ export default function Organizations() {
         },
       });
 
-      toast.success('User approved and welcome email sent');
+      const successMessage = createdOrgId 
+        ? `User approved! Organization "${facilityName}" created with site.`
+        : 'User approved and welcome email sent';
+      
+      toast.success(successMessage);
       setApprovalDialogOpen(false);
       setSelectedPendingUser(null);
       setSelectedSiteId('');
       fetchPendingUsers();
       fetchApprovedUsers();
+      fetchOrganizations();
+      fetchSites();
     } catch (error: any) {
       console.error('Error approving user:', error);
       toast.error(error.message || 'Failed to approve user');
