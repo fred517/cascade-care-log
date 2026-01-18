@@ -3,6 +3,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { MetricCard } from '@/components/dashboard/MetricCard';
 import { AlertBanner } from '@/components/dashboard/AlertBanner';
 import { QuickStats } from '@/components/dashboard/QuickStats';
+import { PendingApprovalsWidget } from '@/components/dashboard/PendingApprovalsWidget';
 import { MetricChart } from '@/components/charts/MetricChart';
 import { PARAMETERS, METRICS, ParameterKey, MetricType, DailyStatus, Reading, Threshold, AlertEvent, getDefaultThresholds, PARAMETER_LIST } from '@/types/wastewater';
 import { useAuth } from '@/hooks/useAuth';
@@ -179,6 +180,11 @@ const Index = () => {
             })}
             {site && <span className="ml-2">• {site.name}</span>}
           </p>
+        </div>
+
+        {/* Admin: Pending Approvals Widget */}
+        <div className="mb-6">
+          <PendingApprovalsWidget />
         </div>
 
         {/* Alert Banner */}
