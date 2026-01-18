@@ -208,7 +208,7 @@ const Index = () => {
 
         {/* Selected Metric Chart */}
         {selectedMetric && (
-          <div className="bg-card rounded-xl border border-border p-6 animate-slide-up">
+          <div className="bg-card rounded-xl border border-border p-4 sm:p-6 animate-slide-up min-w-0 overflow-hidden">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="text-xl font-semibold text-foreground">

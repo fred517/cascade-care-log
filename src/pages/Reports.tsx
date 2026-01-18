@@ -1101,7 +1101,7 @@ export default function Reports() {
               <div ref={reportContentRef} className="space-y-6">
                 <div className="charts-container">
                   {selectedMetric ? (
-                    <div className="bg-card rounded-xl border border-border p-6">
+                    <div className="bg-card rounded-xl border border-border p-4 sm:p-6 min-w-0 overflow-hidden">
                       <h3 className="text-lg font-semibold text-foreground mb-4">
                         {METRICS[selectedMetric].name} Trend
                       </h3>
@@ -1112,13 +1112,13 @@ export default function Reports() {
                       />
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
                       {Object.keys(METRICS).map(metricId => {
                         const metricReadings = chartReadings.filter(r => r.metricId === metricId);
                         if (metricReadings.length === 0) return null;
 
                         return (
-                          <div key={metricId} className="bg-card rounded-xl border border-border p-6">
+                          <div key={metricId} className="bg-card rounded-xl border border-border p-4 sm:p-6 min-w-0 overflow-hidden">
                             <h3 className="text-lg font-semibold text-foreground mb-4">
                               {METRICS[metricId as MetricType].name}
                             </h3>
