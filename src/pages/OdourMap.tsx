@@ -1,20 +1,18 @@
 import { useState, useMemo } from 'react';
-import { Plus, Map, List, FileText, BarChart3 } from 'lucide-react';
+import { Plus, Map, List, BarChart3, FileText, AlertCircle } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useSiteMaps, useOdourIncidents } from '@/hooks/useOdourMapping';
+import { useSite } from '@/hooks/useSite';
 import SiteMapUpload from '@/components/odour/SiteMapUpload';
 import OdourIncidentForm from '@/components/odour/OdourIncidentForm';
 import OdourIncidentReport from '@/components/odour/OdourIncidentReport';
-import { format, subMonths, isWithinInterval, startOfMonth, endOfMonth, eachMonthOfInterval } from 'date-fns';
+import { format, subMonths, startOfMonth, endOfMonth, eachMonthOfInterval } from 'date-fns';
 import { FIDOL_SCALE, type OdourIncident, type SiteMap } from '@/types/odour';
 import { cn } from '@/lib/utils';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-
-// Placeholder facility ID - in a real app this would come from context/route
-const FACILITY_ID = 'placeholder-facility-id';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 export default function OdourMap() {
   const [showUpload, setShowUpload] = useState(false);
@@ -24,12 +22,16 @@ export default function OdourMap() {
   const [clickPosition, setClickPosition] = useState<{ lat: number; lng: number } | null>(null);
   const [selectedIncident, setSelectedIncident] = useState<OdourIncident | null>(null);
 
+  // Use real site from context
+  const { site, loading: siteLoading } = useSite();
+  const siteId = site?.id;
+
   const { data: siteMaps = [], isLoading: mapsLoading } = useSiteMaps();
-  const { data: incidents = [], isLoading: incidentsLoading } = useOdourIncidents(FACILITY_ID);
+  const { data: incidents = [], isLoading: incidentsLoading } = useOdourIncidents(siteId);
 
   const handleRecordIncident = () => {
-    // For now, use a placeholder position - in a real app this would come from map click
-    setClickPosition({ lat: 0, lng: 0 });
+    // Don't set a placeholder position - let the form use GPS
+    setClickPosition(null);
     setShowIncidentForm(true);
   };
 
@@ -80,13 +82,37 @@ export default function OdourMap() {
 
   const INTENSITY_COLORS = ['#22c55e', '#84cc16', '#eab308', '#f97316', '#ef4444'];
 
+  if (siteLoading) {
+    return (
+      <AppLayout>
+        <div className="p-6 flex items-center justify-center">
+          <p className="text-muted-foreground">Loading site...</p>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  if (!siteId) {
+    return (
+      <AppLayout>
+        <div className="p-6">
+          <div className="text-center py-12 border-2 border-dashed rounded-xl">
+            <AlertCircle className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+            <h3 className="font-semibold mb-2">No Site Available</h3>
+            <p className="text-muted-foreground">You need to be assigned to a site to use odour mapping.</p>
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
+
   return (
     <AppLayout>
       <div className="p-6 space-y-6">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold">Odour Incidents</h1>
-            <p className="text-muted-foreground">Record and track odour incidents</p>
+            <p className="text-muted-foreground">Record and track odour incidents at {site?.name}</p>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => setShowUpload(true)}>
@@ -184,11 +210,19 @@ export default function OdourMap() {
                       src={map.image_url} 
                       alt={map.name}
                       className="w-full h-40 object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = '/placeholder.svg';
+                      }}
                     />
                     <CardHeader className="p-4">
                       <CardTitle className="text-sm">{map.name}</CardTitle>
                       {map.description && (
                         <p className="text-xs text-muted-foreground">{map.description}</p>
+                      )}
+                      {map.latitude && map.longitude && (
+                        <p className="text-xs text-muted-foreground">
+                          📍 {map.latitude.toFixed(4)}, {map.longitude.toFixed(4)}
+                        </p>
                       )}
                     </CardHeader>
                   </Card>
@@ -302,15 +336,17 @@ export default function OdourMap() {
         {/* Dialogs */}
         <SiteMapUpload open={showUpload} onClose={() => setShowUpload(false)} />
         
-        <OdourIncidentForm
-          open={showIncidentForm}
-          onClose={() => {
-            setShowIncidentForm(false);
-            setClickPosition(null);
-          }}
-          clickPosition={clickPosition}
-          facilityId={FACILITY_ID}
-        />
+        {siteId && (
+          <OdourIncidentForm
+            open={showIncidentForm}
+            onClose={() => {
+              setShowIncidentForm(false);
+              setClickPosition(null);
+            }}
+            clickPosition={clickPosition}
+            siteId={siteId}
+          />
+        )}
         
         <OdourIncidentReport
           open={showReport}

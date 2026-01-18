@@ -12,16 +12,14 @@ interface OdourIncidentFormProps {
   open: boolean;
   onClose: () => void;
   clickPosition: { lat: number; lng: number } | null;
-  facilityId: string;
-  facilityLatLng?: { lat: number; lng: number } | null;
+  siteId: string;
 }
 
 export default function OdourIncidentForm({ 
   open, 
   onClose, 
   clickPosition, 
-  facilityId,
-  facilityLatLng 
+  siteId,
 }: OdourIncidentFormProps) {
   const [intensity, setIntensity] = useState<number | null>(null);
   const [description, setDescription] = useState('');
@@ -32,16 +30,17 @@ export default function OdourIncidentForm({
   const createIncident = useCreateOdourIncident();
   const fetchWeather = useFetchWeather();
 
-  // Effective coordinates: prefer map click, fall back to GPS
-  const effectivePosition = clickPosition ?? (geo.status === "granted" ? geo.coords : null);
+  // Effective coordinates: prefer map click (if valid), fall back to GPS
+  const isValidClick = clickPosition && (clickPosition.lat !== 0 || clickPosition.lng !== 0);
+  const effectivePosition = isValidClick ? clickPosition : (geo.status === "granted" ? geo.coords : null);
 
   // Auto-fetch weather when form opens and we have coordinates
   useEffect(() => {
-    if (open && facilityLatLng?.lat && facilityLatLng?.lng) {
+    if (open && effectivePosition?.lat && effectivePosition?.lng) {
       setFetchingWeather(true);
       fetchWeather.mutateAsync({
-        latitude: facilityLatLng.lat,
-        longitude: facilityLatLng.lng,
+        latitude: effectivePosition.lat,
+        longitude: effectivePosition.lng,
       }).then((data) => {
         setWeather(data);
       }).catch(() => {
@@ -50,14 +49,14 @@ export default function OdourIncidentForm({
         setFetchingWeather(false);
       });
     }
-  }, [open, facilityLatLng?.lat, facilityLatLng?.lng]);
+  }, [open, effectivePosition?.lat, effectivePosition?.lng]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!effectivePosition) return;
 
     await createIncident.mutateAsync({
-      facility_id: facilityId,
+      site_id: siteId,
       lat: effectivePosition.lat,
       lng: effectivePosition.lng,
       intensity,
@@ -90,6 +89,38 @@ export default function OdourIncidentForm({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-6">
+          {/* GPS Location - moved to top for clarity */}
+          <div className="bg-muted/50 rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="font-semibold text-sm">Location</h4>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={geo.request}
+                disabled={geo.status === "requesting"}
+              >
+                <MapPin className="w-4 h-4 mr-1" />
+                {geo.status === "requesting" ? "Getting location..." : "Use my location"}
+              </Button>
+            </div>
+            
+            {effectivePosition ? (
+              <p className="text-sm text-green-600">
+                📍 {effectivePosition.lat.toFixed(6)}, {effectivePosition.lng.toFixed(6)}
+                {geo.status === "granted" && !isValidClick && (
+                  <span className="text-muted-foreground"> (GPS ±{geo.coords?.accuracy?.toFixed(0) ?? 0}m)</span>
+                )}
+              </p>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {geo.status === "requesting" ? "Getting GPS location..." : 
+                 geo.error ? geo.error : 
+                 "Click 'Use my location' to set GPS coordinates"}
+              </p>
+            )}
+          </div>
+
           {/* Weather Data Card */}
           <div className="bg-muted/50 rounded-xl p-4 space-y-3">
             <div className="flex items-center justify-between">
@@ -123,39 +154,7 @@ export default function OdourIncidentForm({
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">
-                {facilityLatLng ? 'Fetching weather data...' : 'No GPS coordinates available'}
-              </p>
-            )}
-          </div>
-
-          {/* GPS Location */}
-          <div className="bg-muted/50 rounded-xl p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <h4 className="font-semibold text-sm">Location</h4>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={geo.request}
-                disabled={geo.status === "requesting"}
-              >
-                <MapPin className="w-4 h-4 mr-1" />
-                {geo.status === "requesting" ? "Getting location..." : "Use my location"}
-              </Button>
-            </div>
-            
-            {geo.status === "granted" && !clickPosition ? (
-              <p className="text-sm">
-                GPS: {geo.coords.lat.toFixed(6)}, {geo.coords.lng.toFixed(6)} 
-                <span className="text-muted-foreground"> (±{geo.coords.accuracy?.toFixed(0) ?? 0}m)</span>
-              </p>
-            ) : clickPosition ? (
-              <p className="text-sm">
-                Map: {clickPosition.lat.toFixed(6)}, {clickPosition.lng.toFixed(6)}
-              </p>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                {geo.error || "Click map or use GPS to set location"}
+                {effectivePosition ? (fetchingWeather ? 'Fetching weather data...' : 'Weather data unavailable') : 'Set location first to fetch weather'}
               </p>
             )}
           </div>
