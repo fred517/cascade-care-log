@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { format } from 'date-fns';
-import { Check, X, Clock, UserCheck, Users, Loader2, Mail, RotateCw } from 'lucide-react';
+import { Check, X, Clock, UserCheck, Users, Loader2, Mail, Building2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -19,6 +19,22 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
 
 interface PendingUser {
   id: string;
@@ -33,9 +49,18 @@ interface PendingUser {
   is_approved: boolean;
 }
 
+interface Site {
+  id: string;
+  name: string;
+}
+
 export default function UserApproval() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const [resendingUserId, setResendingUserId] = useState<string | null>(null);
+  const [approvalDialogOpen, setApprovalDialogOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<PendingUser | null>(null);
+  const [selectedSiteId, setSelectedSiteId] = useState<string>('');
 
   const { data: pendingUsers = [], isLoading } = useQuery({
     queryKey: ['pending-users'],
@@ -66,8 +91,21 @@ export default function UserApproval() {
     },
   });
 
+  const { data: sites = [] } = useQuery({
+    queryKey: ['all-sites'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('sites')
+        .select('id, name')
+        .order('name');
+
+      if (error) throw error;
+      return data as Site[];
+    },
+  });
+
   const approveMutation = useMutation({
-    mutationFn: async (pendingUser: PendingUser) => {
+    mutationFn: async ({ pendingUser, siteId }: { pendingUser: PendingUser; siteId: string }) => {
       // First, update the profile to approved
       const { error } = await supabase
         .from('profiles')
@@ -75,10 +113,33 @@ export default function UserApproval() {
           is_approved: true,
           approved_by: user?.id,
           approved_at: new Date().toISOString(),
+          site_id: siteId || null,
         })
         .eq('user_id', pendingUser.user_id);
 
       if (error) throw error;
+
+      // Remove from default site if exists
+      await supabase
+        .from('site_members')
+        .delete()
+        .eq('user_id', pendingUser.user_id)
+        .eq('site_id', '00000000-0000-0000-0000-000000000001');
+
+      // Add to selected site
+      if (siteId) {
+        const { error: memberError } = await supabase
+          .from('site_members')
+          .upsert({
+            user_id: pendingUser.user_id,
+            site_id: siteId,
+            role: 'operator',
+          }, { onConflict: 'user_id,site_id' });
+
+        if (memberError) {
+          console.error('Failed to add user to site:', memberError);
+        }
+      }
 
       // Then send welcome email with password setup link
       const { error: emailError } = await supabase.functions.invoke('send-welcome-email', {
@@ -91,12 +152,14 @@ export default function UserApproval() {
 
       if (emailError) {
         console.error('Failed to send welcome email:', emailError);
-        // Don't throw - user is already approved, just log the error
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['pending-users'] });
       queryClient.invalidateQueries({ queryKey: ['approved-users'] });
+      setApprovalDialogOpen(false);
+      setSelectedUser(null);
+      setSelectedSiteId('');
       toast({ title: 'User Approved', description: 'Welcome email with password setup link has been sent.' });
     },
     onError: (error: any) => {
@@ -106,7 +169,6 @@ export default function UserApproval() {
 
   const rejectMutation = useMutation({
     mutationFn: async (userId: string) => {
-      // Delete the user from auth (requires admin API via edge function)
       const { error } = await supabase.functions.invoke('delete-user', {
         body: { userId },
       });
@@ -117,8 +179,7 @@ export default function UserApproval() {
       queryClient.invalidateQueries({ queryKey: ['pending-users'] });
       toast({ title: 'User Rejected', description: 'The user account has been removed.' });
     },
-    onError: (error: any) => {
-      // If edge function doesn't exist, just show a message
+    onError: () => {
       toast({ 
         title: 'Note', 
         description: 'User will remain in pending state. Contact support to fully remove the account.',
@@ -126,8 +187,6 @@ export default function UserApproval() {
       });
     },
   });
-
-  const [resendingUserId, setResendingUserId] = useState<string | null>(null);
 
   const resendWelcomeEmail = async (approvedUser: PendingUser) => {
     setResendingUserId(approvedUser.user_id);
@@ -158,6 +217,19 @@ export default function UserApproval() {
     }
   };
 
+  const openApprovalDialog = (pendingUser: PendingUser) => {
+    setSelectedUser(pendingUser);
+    setSelectedSiteId('');
+    setApprovalDialogOpen(true);
+  };
+
+  const handleApprove = () => {
+    if (selectedUser) {
+      approveMutation.mutate({ pendingUser: selectedUser, siteId: selectedSiteId });
+    }
+  };
+
+  if (isLoading) {
     return (
       <Card>
         <CardContent className="flex items-center justify-center py-12">
@@ -169,6 +241,77 @@ export default function UserApproval() {
 
   return (
     <div className="space-y-6">
+      {/* Site Assignment Dialog */}
+      <Dialog open={approvalDialogOpen} onOpenChange={setApprovalDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Approve User</DialogTitle>
+            <DialogDescription>
+              Assign {selectedUser?.first_name || selectedUser?.display_name || selectedUser?.email} to a site before approving.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="py-4 space-y-4">
+            <div className="space-y-2">
+              <Label>User Details</Label>
+              <div className="p-3 rounded-lg bg-muted text-sm">
+                <p className="font-medium">
+                  {selectedUser?.first_name && selectedUser?.surname 
+                    ? `${selectedUser.first_name} ${selectedUser.surname}`
+                    : selectedUser?.display_name || 'No name'}
+                </p>
+                <p className="text-muted-foreground">{selectedUser?.email}</p>
+                {selectedUser?.facility_name && (
+                  <p className="text-muted-foreground mt-1">
+                    Requested facility: {selectedUser.facility_name}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="site-select">Assign to Site</Label>
+              <Select value={selectedSiteId} onValueChange={setSelectedSiteId}>
+                <SelectTrigger id="site-select">
+                  <SelectValue placeholder="Select a site..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {sites.map((site) => (
+                    <SelectItem key={site.id} value={site.id}>
+                      <div className="flex items-center gap-2">
+                        <Building2 className="w-4 h-4 text-muted-foreground" />
+                        {site.name}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                The user will be added as an operator to this site.
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setApprovalDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleApprove}
+              disabled={!selectedSiteId || approveMutation.isPending}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              {approveMutation.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              ) : (
+                <Check className="w-4 h-4 mr-2" />
+              )}
+              Approve & Send Welcome Email
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Pending Approvals */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
@@ -222,8 +365,7 @@ export default function UserApproval() {
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <Button
                         size="sm"
-                        onClick={() => approveMutation.mutate(pendingUser)}
-                        disabled={approveMutation.isPending}
+                        onClick={() => openApprovalDialog(pendingUser)}
                         className="bg-green-600 hover:bg-green-700"
                       >
                         <Check className="w-4 h-4 mr-1" />
