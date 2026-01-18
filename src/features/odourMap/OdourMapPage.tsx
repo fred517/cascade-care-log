@@ -9,6 +9,7 @@ import { useSite } from "@/hooks/useSite";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import { loadSiteMap, uploadSiteMap } from "@/features/odourMap/siteMapStorage";
 import { createIncident, listIncidents, type OdourIncident } from "@/features/odourMap/odourIncidents";
+import { ErrorBoundary } from "@/features/odourMap/ErrorBoundary";
 
 import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerIcon from "leaflet/dist/images/marker-icon.png";
@@ -163,8 +164,9 @@ export default function OdourMapPage() {
 
   return (
     <AppLayout>
-      <div className="space-y-6 p-4 md:p-6">
-        <div className="rounded-xl border bg-card p-4 space-y-4">
+      <ErrorBoundary>
+        <div className="space-y-6 p-4 md:p-6">
+          <div className="rounded-xl border bg-card p-4 space-y-4">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
               <h1 className="text-2xl font-bold">Odour Mapping</h1>
@@ -356,8 +358,9 @@ export default function OdourMapPage() {
               )}
             </div>
           </div>
+          </div>
         </div>
-      </div>
+      </ErrorBoundary>
     </AppLayout>
   );
 }
