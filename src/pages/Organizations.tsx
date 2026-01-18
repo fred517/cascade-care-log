@@ -141,6 +141,8 @@ export default function Organizations() {
   const [approvalDialogOpen, setApprovalDialogOpen] = useState(false);
   const [selectedPendingUser, setSelectedPendingUser] = useState<PendingUser | null>(null);
   const [selectedSiteId, setSelectedSiteId] = useState<string>('');
+  const [selectedOrgId, setSelectedOrgId] = useState<string>('');
+  const [assignmentMode, setAssignmentMode] = useState<'create' | 'existing'>('create');
   const [approvingUser, setApprovingUser] = useState(false);
   const [resendingUserId, setResendingUserId] = useState<string | null>(null);
   const [approvedUsers, setApprovedUsers] = useState<PendingUser[]>([]);
@@ -309,9 +311,13 @@ export default function Organizations() {
       const facilityName = selectedPendingUser.facility_name?.trim();
       let createdSiteId: string | null = null;
       let createdOrgId: string | null = null;
+      let assignedOrgId: string | null = null;
 
-      // If facility name is provided, create organization and site automatically
-      if (facilityName) {
+      // Check if we should create new org or assign to existing
+      const shouldCreateNewOrg = facilityName && assignmentMode === 'create';
+      const shouldAssignToExisting = assignmentMode === 'existing' && selectedOrgId;
+
+      if (shouldCreateNewOrg) {
         // Create organization with the facility name
         const { data: newOrg, error: orgError } = await supabase
           .from('organizations')
@@ -356,6 +362,30 @@ export default function Organizations() {
           });
 
         if (siteMemberError) throw siteMemberError;
+      } else if (shouldAssignToExisting) {
+        assignedOrgId = selectedOrgId;
+
+        // Add user to the existing organization as operator
+        const { error: orgMemberError } = await supabase
+          .from('org_members')
+          .insert({
+            org_id: selectedOrgId,
+            user_id: selectedPendingUser.user_id,
+            role: 'operator',
+          });
+
+        if (orgMemberError) throw orgMemberError;
+
+        // If a site is also selected, add user to that site
+        if (selectedSiteId) {
+          await supabase
+            .from('site_members')
+            .upsert({
+              user_id: selectedPendingUser.user_id,
+              site_id: selectedSiteId,
+              role: 'operator',
+            }, { onConflict: 'user_id,site_id' });
+        }
       }
 
       // Use the created site or the manually selected site
@@ -381,8 +411,8 @@ export default function Organizations() {
         .eq('user_id', selectedPendingUser.user_id)
         .eq('site_id', '00000000-0000-0000-0000-000000000001');
 
-      // If no org was created but a site was selected, add user to that site
-      if (!createdSiteId && selectedSiteId) {
+      // If no org was created/assigned but a site was selected, add user to that site
+      if (!createdSiteId && !shouldAssignToExisting && selectedSiteId) {
         await supabase
           .from('site_members')
           .upsert({
@@ -409,14 +439,20 @@ export default function Organizations() {
         },
       });
 
-      const successMessage = createdOrgId 
-        ? `User approved! Organization "${facilityName}" created with site.`
-        : 'User approved and welcome email sent';
+      let successMessage = 'User approved and welcome email sent';
+      if (createdOrgId) {
+        successMessage = `User approved! Organization "${facilityName}" created with site.`;
+      } else if (assignedOrgId) {
+        const orgName = organizations.find(o => o.id === assignedOrgId)?.name;
+        successMessage = `User approved and added to "${orgName}" organization.`;
+      }
       
       toast.success(successMessage);
       setApprovalDialogOpen(false);
       setSelectedPendingUser(null);
       setSelectedSiteId('');
+      setSelectedOrgId('');
+      setAssignmentMode('create');
       fetchPendingUsers();
       fetchApprovedUsers();
       fetchOrganizations();
@@ -733,11 +769,61 @@ export default function Organizations() {
                   {selectedPendingUser?.phone_number && (
                     <p className="text-muted-foreground">{selectedPendingUser.phone_number}</p>
                   )}
+                  {selectedPendingUser?.facility_name && (
+                    <p className="text-muted-foreground mt-1">
+                      <span className="font-medium">Requested facility:</span> {selectedPendingUser.facility_name}
+                    </p>
+                  )}
                 </div>
               </div>
 
-              {/* Organization to be created - Prominent display */}
-              {selectedPendingUser?.facility_name ? (
+              {/* Assignment Mode Toggle - only show if facility name exists */}
+              {selectedPendingUser?.facility_name && organizations.length > 0 && (
+                <div className="space-y-2">
+                  <Label>Assignment Option</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAssignmentMode('create');
+                        setSelectedOrgId('');
+                        setSelectedSiteId('');
+                      }}
+                      className={cn(
+                        "p-3 rounded-lg border text-sm text-left transition-all",
+                        assignmentMode === 'create'
+                          ? "border-primary bg-primary/10 text-foreground"
+                          : "border-border bg-card hover:bg-muted text-muted-foreground"
+                      )}
+                    >
+                      <div className="flex items-center gap-2 font-medium">
+                        <Plus className="w-4 h-4" />
+                        Create New
+                      </div>
+                      <p className="text-xs mt-1 opacity-80">New org & site</p>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAssignmentMode('existing')}
+                      className={cn(
+                        "p-3 rounded-lg border text-sm text-left transition-all",
+                        assignmentMode === 'existing'
+                          ? "border-primary bg-primary/10 text-foreground"
+                          : "border-border bg-card hover:bg-muted text-muted-foreground"
+                      )}
+                    >
+                      <div className="flex items-center gap-2 font-medium">
+                        <Users className="w-4 h-4" />
+                        Add to Existing
+                      </div>
+                      <p className="text-xs mt-1 opacity-80">Join existing org</p>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Create New Organization - Prominent display */}
+              {selectedPendingUser?.facility_name && assignmentMode === 'create' && (
                 <div className="space-y-2">
                   <Label className="flex items-center gap-2">
                     <Building2 className="w-4 h-4 text-primary" />
@@ -753,7 +839,67 @@ export default function Organizations() {
                     </p>
                   </div>
                 </div>
-              ) : (
+              )}
+
+              {/* Assign to Existing Organization */}
+              {assignmentMode === 'existing' && (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="org-select">Select Organization</Label>
+                    <Select value={selectedOrgId} onValueChange={(value) => {
+                      setSelectedOrgId(value);
+                      setSelectedSiteId(''); // Reset site when org changes
+                    }}>
+                      <SelectTrigger id="org-select">
+                        <SelectValue placeholder="Select an organization..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {organizations.map((org) => (
+                          <SelectItem key={org.id} value={org.id}>
+                            <div className="flex items-center gap-2">
+                              <Building2 className="w-4 h-4 text-muted-foreground" />
+                              {org.name}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {selectedOrgId && (
+                    <div className="space-y-2">
+                      <Label htmlFor="site-select">Select Site (Optional)</Label>
+                      <Select value={selectedSiteId} onValueChange={setSelectedSiteId}>
+                        <SelectTrigger id="site-select">
+                          <SelectValue placeholder="Select a site..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {sites
+                            .filter(site => {
+                              // Filter sites by org_id if we have that data
+                              // For now show all sites - in production you'd filter by org
+                              return true;
+                            })
+                            .map((site) => (
+                              <SelectItem key={site.id} value={site.id}>
+                                <div className="flex items-center gap-2">
+                                  <Building2 className="w-4 h-4 text-muted-foreground" />
+                                  {site.name}
+                                </div>
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        The user will be added as an operator to this organization and site.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* No facility name - just site selection */}
+              {!selectedPendingUser?.facility_name && (
                 <div className="space-y-2">
                   <Label htmlFor="site-select">Assign to Existing Site</Label>
                   <Select value={selectedSiteId} onValueChange={setSelectedSiteId}>
@@ -784,7 +930,15 @@ export default function Organizations() {
               </Button>
               <Button 
                 onClick={handleApproveUser}
-                disabled={(!selectedPendingUser?.facility_name && !selectedSiteId) || approvingUser}
+                disabled={
+                  approvingUser || 
+                  // For create mode with facility name - always valid
+                  (assignmentMode === 'create' && !selectedPendingUser?.facility_name && !selectedSiteId) ||
+                  // For existing mode - need org selected
+                  (assignmentMode === 'existing' && !selectedOrgId) ||
+                  // No facility name and no site selected
+                  (!selectedPendingUser?.facility_name && !selectedSiteId && assignmentMode !== 'existing')
+                }
                 className="bg-green-600 hover:bg-green-700"
               >
                 {approvingUser ? (
@@ -792,9 +946,11 @@ export default function Organizations() {
                 ) : (
                   <Check className="w-4 h-4 mr-2" />
                 )}
-                {selectedPendingUser?.facility_name 
-                  ? 'Approve & Create Organization'
-                  : 'Approve & Send Welcome Email'
+                {assignmentMode === 'existing'
+                  ? 'Approve & Add to Organization'
+                  : selectedPendingUser?.facility_name 
+                    ? 'Approve & Create Organization'
+                    : 'Approve & Send Welcome Email'
                 }
               </Button>
             </DialogFooter>
