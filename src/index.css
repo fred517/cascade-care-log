@@ -130,7 +130,7 @@
 
 @layer components {
   .metric-card {
-    @apply relative overflow-hidden rounded-xl border border-border bg-card p-4 transition-all duration-300;
+    @apply relative overflow-hidden rounded-lg sm:rounded-xl border border-border bg-card p-3 sm:p-4 transition-all duration-300;
     background: var(--gradient-card);
   }
 
