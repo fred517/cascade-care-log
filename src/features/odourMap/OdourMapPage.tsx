@@ -34,9 +34,8 @@ export default function OdourMapPage() {
   const { site, loading: siteLoading } = useSite();
   const geo = useGeolocation();
 
-  // You need an orgId. If you store it on profile, use that.
-  // If your app uses site.org_id, prefer that.
-  const orgId = (site as any)?.org_id || (profile as any)?.org_id;
+  // Get orgId from site (preferred) or profile as fallback
+  const orgId = site?.org_id || (profile as any)?.org_id;
   const siteId = site?.id;
 
   const [siteMapUrl, setSiteMapUrl] = useState<string | null>(null);
@@ -59,18 +58,26 @@ export default function OdourMapPage() {
     let cancelled = false;
 
     async function load() {
-      if (!orgId || !siteId) return;
+      // If no orgId, we can still load with just siteId for incidents that don't require org
+      if (!siteId) {
+        setLoading(false);
+        return;
+      }
 
       setLoading(true);
       try {
-        const map = await loadSiteMap({ orgId, siteId });
-        if (!cancelled) {
-          setSiteMapUrl(map.signedUrl);
-          setSiteMapName(map.record?.file_name ?? null);
-        }
+        if (orgId) {
+          const map = await loadSiteMap({ orgId, siteId });
+          if (!cancelled) {
+            setSiteMapUrl(map.signedUrl);
+            setSiteMapName(map.record?.file_name ?? null);
+          }
 
-        const list = await listIncidents({ orgId, siteId });
-        if (!cancelled) setIncidents(list);
+          const list = await listIncidents({ orgId, siteId });
+          if (!cancelled) setIncidents(list);
+        }
+      } catch (err) {
+        console.error("Error loading odour map data:", err);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -87,6 +94,33 @@ export default function OdourMapPage() {
     if (incidents[0]) return [incidents[0].lat, incidents[0].lng] as [number, number];
     return [-27.4698, 153.0251] as [number, number];
   }, [draftLat, draftLng, incidents]);
+
+  // Show loading state while site is being fetched
+  if (siteLoading) {
+    return (
+      <AppLayout>
+        <div className="flex items-center justify-center p-12">
+          <div className="text-muted-foreground">Loading site data...</div>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  // Show message if no site is available
+  if (!siteId) {
+    return (
+      <AppLayout>
+        <div className="p-6">
+          <div className="rounded-xl border bg-card p-6 text-center">
+            <h2 className="text-lg font-semibold mb-2">No Site Selected</h2>
+            <p className="text-muted-foreground">
+              Please ensure you have access to at least one site to use the odour mapping feature.
+            </p>
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
 
   async function onUpload(file: File) {
     if (!orgId || !siteId) return;
