@@ -90,12 +90,14 @@ export function OdourMapPage() {
   }, [siteId, orgId]);
 
   async function onUploadMap(file: File) {
-    if (!siteId || !orgId || !user?.id) return;
+    if (!siteId || !orgId) return;
     setSavingMap(true);
     try {
-      const rec = await uploadSiteMap({ orgId, siteId, createdBy: user.id, file });
-      setSiteMapUrl(rec.image_url);
-      setSiteMapName(rec.name);
+      const rec = await uploadSiteMap({ orgId, siteId, file });
+      // Reload to get signed URL
+      const { signedUrl } = await loadSiteMap({ orgId, siteId });
+      setSiteMapUrl(signedUrl);
+      setSiteMapName(rec.file_name);
     } catch (e: unknown) {
       console.error(e);
       const msg = e instanceof Error ? e.message : "Failed to upload site map.";
