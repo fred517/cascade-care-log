@@ -63,23 +63,23 @@ export function useCreateSiteMap() {
   });
 }
 
-// Facility-based odour incidents hooks
-export function useOdourIncidents(facilityId?: string) {
+// Site-based odour incidents hooks
+export function useOdourIncidents(siteId?: string) {
   return useQuery({
-    queryKey: ['odour-incidents', facilityId],
+    queryKey: ['odour-incidents', siteId],
     queryFn: async () => {
-      if (!facilityId) return [];
+      if (!siteId) return [];
       
       const { data, error } = await supabase
         .from('odour_incidents')
         .select('*')
-        .eq('facility_id', facilityId)
+        .eq('site_id', siteId)
         .order('occurred_at', { ascending: false });
       
       if (error) throw error;
       return data as OdourIncident[];
     },
-    enabled: !!facilityId,
+    enabled: !!siteId,
   });
 }
 
@@ -89,7 +89,7 @@ export function useCreateOdourIncident() {
 
   return useMutation({
     mutationFn: async (incident: {
-      facility_id: string;
+      site_id: string;
       lat: number;
       lng: number;
       intensity?: number | null;
@@ -105,7 +105,8 @@ export function useCreateOdourIncident() {
       const { data, error } = await supabase
         .from('odour_incidents')
         .insert({
-          facility_id: incident.facility_id,
+          site_id: incident.site_id,
+          facility_id: incident.site_id, // Keep facility_id for backward compat (same as site_id)
           lat: incident.lat,
           lng: incident.lng,
           intensity: incident.intensity ?? null,
@@ -137,13 +138,12 @@ export function useCreateOdourIncident() {
               windSpeed: incident.wind_speed,
               temperature: incident.temperature,
               occurredAt: incident.occurred_at,
-              facilityId: incident.facility_id,
+              siteId: incident.site_id,
             },
           });
           console.log('Odour alert email sent for high-intensity incident');
         } catch (emailError) {
           console.error('Failed to send odour alert email:', emailError);
-          // Don't throw - incident was still created successfully
         }
       }
       
