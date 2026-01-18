@@ -1,23 +1,27 @@
 import { useState } from 'react';
 import { format, isToday, isFuture, startOfDay } from 'date-fns';
 import { AppLayout } from '@/components/layout/AppLayout';
-import { ReadingForm } from '@/components/readings/ReadingForm';
+import { ReadingForm, RemediationData } from '@/components/readings/ReadingForm';
 import { WeeklySummary } from '@/components/readings/WeeklySummary';
 import { MonthlyCalendar } from '@/components/readings/MonthlyCalendar';
 import { Reading, MetricType, Threshold, METRICS } from '@/types/wastewater';
 import { useReadings } from '@/hooks/useReadings';
 import { useSite } from '@/hooks/useSite';
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
 import { Clock, Loader2, CalendarIcon, ChevronLeft, ChevronRight, History, AlertTriangle, Paperclip, ExternalLink, BarChart3, PenLine, CalendarDays } from 'lucide-react';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { toast } from 'sonner';
 
 type ViewMode = 'entry' | 'summary' | 'calendar';
 
 export default function Readings() {
   const { site, loading: siteLoading } = useSite();
+  const { user } = useAuth();
   const { readings, thresholds, addMultipleReadings, getReadingsForDate, uploadAttachment, loading: readingsLoading } = useReadings();
   const [recentSubmissions, setRecentSubmissions] = useState<Reading[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
@@ -28,7 +32,7 @@ export default function Readings() {
   const isSelectedFuture = isFuture(startOfDay(selectedDate));
   const existingReadings = getReadingsForDate(selectedDate);
 
-  const handleSubmit = async (readings: Omit<Reading, 'id'>[]) => {
+  const handleSubmit = async (readings: Omit<Reading, 'id'>[], remediations?: RemediationData[]) => {
     const readingsData = readings.map(r => ({
       metricId: r.metricId,
       value: r.value,
@@ -48,6 +52,34 @@ export default function Readings() {
     }
 
     const savedReadings = await addMultipleReadings(readingsData, recordDate);
+    
+    // Save remediations if any were completed
+    if (remediations && remediations.length > 0 && user?.id) {
+      for (const remediation of remediations) {
+        // Find the corresponding reading ID
+        const reading = savedReadings.find(r => r.metric_id === remediation.metricId);
+        if (reading) {
+          const { error } = await supabase
+            .from('reading_remediations')
+            .insert({
+              reading_id: reading.id,
+              metric_id: remediation.metricId,
+              condition: remediation.condition,
+              severity: remediation.severity,
+              playbook_title: remediation.playbookTitle,
+              completed_steps: remediation.completedSteps,
+              all_steps: remediation.allSteps,
+              notes: remediation.notes,
+              completed_by: user.id,
+            });
+          
+          if (error) {
+            console.error('Failed to save remediation:', error);
+          }
+        }
+      }
+      toast.success(`Saved ${remediations.length} remediation record${remediations.length > 1 ? 's' : ''}`);
+    }
     
     const newReadings = savedReadings.map((r) => ({
       id: r.id,

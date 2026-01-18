@@ -701,6 +701,59 @@ export type Database = {
         }
         Relationships: []
       }
+      reading_remediations: {
+        Row: {
+          all_steps: string[]
+          completed_at: string
+          completed_by: string
+          completed_steps: number[]
+          condition: string
+          created_at: string
+          id: string
+          metric_id: string
+          notes: string | null
+          playbook_title: string | null
+          reading_id: string
+          severity: string
+        }
+        Insert: {
+          all_steps?: string[]
+          completed_at?: string
+          completed_by: string
+          completed_steps?: number[]
+          condition: string
+          created_at?: string
+          id?: string
+          metric_id: string
+          notes?: string | null
+          playbook_title?: string | null
+          reading_id: string
+          severity: string
+        }
+        Update: {
+          all_steps?: string[]
+          completed_at?: string
+          completed_by?: string
+          completed_steps?: number[]
+          condition?: string
+          created_at?: string
+          id?: string
+          metric_id?: string
+          notes?: string | null
+          playbook_title?: string | null
+          reading_id?: string
+          severity?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reading_remediations_reading_id_fkey"
+            columns: ["reading_id"]
+            isOneToOne: false
+            referencedRelation: "readings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       reading_values: {
         Row: {
           created_at: string

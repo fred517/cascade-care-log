@@ -14,9 +14,19 @@ interface AttachmentInfo {
 }
 
 interface ReadingFormProps {
-  onSubmit: (readings: Omit<WastewaterReading, 'id'>[]) => void;
+  onSubmit: (readings: Omit<WastewaterReading, 'id'>[], remediations?: RemediationData[]) => void;
   thresholds?: Threshold[];
   onUploadFile?: (file: File) => Promise<string | null>;
+}
+
+export interface RemediationData {
+  metricId: ParameterKey;
+  condition: 'low' | 'high';
+  severity: 'watch' | 'alarm';
+  playbookTitle: string;
+  completedSteps: number[];
+  allSteps: string[];
+  notes?: string;
 }
 
 export function ReadingForm({ onSubmit, thresholds = [], onUploadFile }: ReadingFormProps) {
@@ -42,6 +52,8 @@ export function ReadingForm({ onSubmit, thresholds = [], onUploadFile }: Reading
 
   const [expandedNotes, setExpandedNotes] = useState<Set<ParameterKey>>(new Set());
   const [expandedPlaybooks, setExpandedPlaybooks] = useState<Set<string>>(new Set());
+  const [completedSteps, setCompletedSteps] = useState<Record<string, Set<number>>>({});
+  const [remediationNotes, setRemediationNotes] = useState<Record<string, string>>({});
   const [uploadingMetric, setUploadingMetric] = useState<ParameterKey | null>(null);
   const fileInputRefs = useRef<Record<ParameterKey, HTMLInputElement | null>>({} as Record<ParameterKey, HTMLInputElement | null>);
 
@@ -107,6 +119,37 @@ export function ReadingForm({ onSubmit, thresholds = [], onUploadFile }: Reading
       }
       return next;
     });
+  };
+
+  const toggleStepComplete = (playbookKey: string, stepIndex: number) => {
+    setCompletedSteps(prev => {
+      const current = prev[playbookKey] || new Set();
+      const next = new Set(current);
+      if (next.has(stepIndex)) {
+        next.delete(stepIndex);
+      } else {
+        next.add(stepIndex);
+      }
+      return { ...prev, [playbookKey]: next };
+    });
+  };
+
+  const setAllStepsComplete = (playbookKey: string, steps: string[], complete: boolean) => {
+    setCompletedSteps(prev => {
+      if (complete) {
+        return { ...prev, [playbookKey]: new Set(steps.map((_, i) => i)) };
+      } else {
+        return { ...prev, [playbookKey]: new Set() };
+      }
+    });
+  };
+
+  const updateRemediationNote = (playbookKey: string, note: string) => {
+    setRemediationNotes(prev => ({ ...prev, [playbookKey]: note }));
+  };
+
+  const getCompletedCount = (playbookKey: string): number => {
+    return completedSteps[playbookKey]?.size || 0;
   };
 
   function handleChange(key: ParameterKey, next: string) {
@@ -194,15 +237,47 @@ export function ReadingForm({ onSubmit, thresholds = [], onUploadFile }: Reading
       return;
     }
 
+    // Collect remediation data for breached parameters
+    const remediations: RemediationData[] = getBreachPlaybooks
+      .filter(breach => {
+        const playbookKey = `${breach.key}-${breach.condition}`;
+        const completed = completedSteps[playbookKey];
+        return completed && completed.size > 0;
+      })
+      .map(breach => {
+        const playbookKey = `${breach.key}-${breach.condition}`;
+        const completed = completedSteps[playbookKey] || new Set();
+        return {
+          metricId: breach.key,
+          condition: breach.condition,
+          severity: breach.severity,
+          playbookTitle: breach.playbook.title,
+          completedSteps: Array.from(completed).sort((a, b) => a - b),
+          allSteps: breach.playbook.steps,
+          notes: remediationNotes[playbookKey],
+        };
+      });
+
     if (alarms.length > 0) {
-      toast.error(`${alarms.length} ALARM${alarms.length > 1 ? 'S' : ''} triggered - immediate action required`);
+      const alarmsWithSteps = alarms.filter(a => {
+        const breach = getBreachPlaybooks.find(b => b.key === a.key);
+        if (!breach) return false;
+        const playbookKey = `${a.key}-${breach.condition}`;
+        return (completedSteps[playbookKey]?.size || 0) > 0;
+      });
+      
+      if (alarmsWithSteps.length < alarms.length) {
+        toast.error(`${alarms.length} ALARM${alarms.length > 1 ? 'S' : ''} triggered - complete playbook steps before submitting`);
+      } else {
+        toast.warning(`${alarms.length} ALARM${alarms.length > 1 ? 'S' : ''} with remediation actions recorded`);
+      }
     }
     if (watches.length > 0) {
       toast.warning(`${watches.length} parameter${watches.length > 1 ? 's' : ''} in WATCH range`);
     }
 
-    onSubmit(readings);
-    toast.success(`${readings.length} reading${readings.length > 1 ? 's' : ''} saved successfully`);
+    onSubmit(readings, remediations.length > 0 ? remediations : undefined);
+    toast.success(`${readings.length} reading${readings.length > 1 ? 's' : ''} saved${remediations.length > 0 ? ` with ${remediations.length} remediation record${remediations.length > 1 ? 's' : ''}` : ''}`);
 
     // Cleanup previews
     Object.values(attachments).forEach(att => {
@@ -226,6 +301,9 @@ export function ReadingForm({ onSubmit, thresholds = [], onUploadFile }: Reading
       return init as Record<ParameterKey, AttachmentInfo | null>;
     });
     setExpandedNotes(new Set());
+    setExpandedPlaybooks(new Set());
+    setCompletedSteps({});
+    setRemediationNotes({});
   }
 
   return (
@@ -249,6 +327,11 @@ export function ReadingForm({ onSubmit, thresholds = [], onUploadFile }: Reading
           expandedPlaybooks={expandedPlaybooks}
           onTogglePlaybook={togglePlaybook}
           loading={playbooksLoading}
+          completedSteps={completedSteps}
+          onToggleStep={toggleStepComplete}
+          onSetAllComplete={setAllStepsComplete}
+          remediationNotes={remediationNotes}
+          onUpdateNote={updateRemediationNote}
         />
       )}
 
@@ -421,6 +504,11 @@ interface AlertPanelWithPlaybooksProps {
   expandedPlaybooks: Set<string>;
   onTogglePlaybook: (key: string) => void;
   loading: boolean;
+  completedSteps: Record<string, Set<number>>;
+  onToggleStep: (playbookKey: string, stepIndex: number) => void;
+  onSetAllComplete: (playbookKey: string, steps: string[], complete: boolean) => void;
+  remediationNotes: Record<string, string>;
+  onUpdateNote: (playbookKey: string, note: string) => void;
 }
 
 function AlertPanelWithPlaybooks({ 
@@ -429,7 +517,12 @@ function AlertPanelWithPlaybooks({
   breachPlaybooks, 
   expandedPlaybooks, 
   onTogglePlaybook,
-  loading 
+  loading,
+  completedSteps,
+  onToggleStep,
+  onSetAllComplete,
+  remediationNotes,
+  onUpdateNote,
 }: AlertPanelWithPlaybooksProps) {
   return (
     <div className="border border-border rounded-xl p-4 bg-card space-y-4">
@@ -447,6 +540,8 @@ function AlertPanelWithPlaybooks({
               const breach = breachPlaybooks.find(b => b.key === a.key);
               const playbookKey = `${a.key}-${breach?.condition || 'high'}`;
               const isExpanded = expandedPlaybooks.has(playbookKey);
+              const completed = completedSteps[playbookKey] || new Set();
+              const note = remediationNotes[playbookKey] || '';
               
               return (
                 <AlertItemWithPlaybook
@@ -456,6 +551,12 @@ function AlertPanelWithPlaybooks({
                   isExpanded={isExpanded}
                   onToggle={() => onTogglePlaybook(playbookKey)}
                   loading={loading}
+                  completedSteps={completed}
+                  onToggleStep={(index) => onToggleStep(playbookKey, index)}
+                  onSetAllComplete={(complete) => onSetAllComplete(playbookKey, breach?.playbook?.steps || [], complete)}
+                  remediationNote={note}
+                  onUpdateNote={(note) => onUpdateNote(playbookKey, note)}
+                  playbookKey={playbookKey}
                 />
               );
             })}
@@ -477,6 +578,8 @@ function AlertPanelWithPlaybooks({
               const breach = breachPlaybooks.find(b => b.key === w.key);
               const playbookKey = `${w.key}-${breach?.condition || 'high'}`;
               const isExpanded = expandedPlaybooks.has(playbookKey);
+              const completed = completedSteps[playbookKey] || new Set();
+              const note = remediationNotes[playbookKey] || '';
               
               return (
                 <AlertItemWithPlaybook
@@ -486,6 +589,12 @@ function AlertPanelWithPlaybooks({
                   isExpanded={isExpanded}
                   onToggle={() => onTogglePlaybook(playbookKey)}
                   loading={loading}
+                  completedSteps={completed}
+                  onToggleStep={(index) => onToggleStep(playbookKey, index)}
+                  onSetAllComplete={(complete) => onSetAllComplete(playbookKey, breach?.playbook?.steps || [], complete)}
+                  remediationNote={note}
+                  onUpdateNote={(note) => onUpdateNote(playbookKey, note)}
+                  playbookKey={playbookKey}
                 />
               );
             })}
@@ -502,12 +611,33 @@ interface AlertItemProps {
   isExpanded: boolean;
   onToggle: () => void;
   loading: boolean;
+  completedSteps: Set<number>;
+  onToggleStep: (index: number) => void;
+  onSetAllComplete: (complete: boolean) => void;
+  remediationNote: string;
+  onUpdateNote: (note: string) => void;
+  playbookKey: string;
 }
 
-function AlertItemWithPlaybook({ evaluation, breach, isExpanded, onToggle, loading }: AlertItemProps) {
+function AlertItemWithPlaybook({ 
+  evaluation, 
+  breach, 
+  isExpanded, 
+  onToggle, 
+  loading,
+  completedSteps,
+  onToggleStep,
+  onSetAllComplete,
+  remediationNote,
+  onUpdateNote,
+  playbookKey,
+}: AlertItemProps) {
   const playbook = breach?.playbook;
   const hasPlaybook = playbook && playbook.steps && playbook.steps.length > 0;
   const isAlarm = evaluation.severity === 'alarm';
+  const totalSteps = playbook?.steps?.length || 0;
+  const completedCount = completedSteps.size;
+  const allComplete = totalSteps > 0 && completedCount === totalSteps;
   
   return (
     <div className={cn(
@@ -521,8 +651,8 @@ function AlertItemWithPlaybook({ evaluation, breach, isExpanded, onToggle, loadi
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1">
             <div className="font-semibold text-foreground text-sm">{evaluation.message}</div>
-            {breach && (
-              <div className="flex items-center gap-2 mt-1.5">
+            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+              {breach && (
                 <span className={cn(
                   "inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded",
                   breach.condition === 'low'
@@ -536,8 +666,19 @@ function AlertItemWithPlaybook({ evaluation, breach, isExpanded, onToggle, loadi
                   )}
                   {breach.condition === 'low' ? 'Below minimum' : 'Above maximum'}
                 </span>
-              </div>
-            )}
+              )}
+              {hasPlaybook && completedCount > 0 && (
+                <span className={cn(
+                  "inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded",
+                  allComplete
+                    ? "bg-green-100 text-green-700 dark:bg-green-950/50 dark:text-green-300"
+                    : "bg-muted text-muted-foreground"
+                )}>
+                  <CheckCircle2 className="w-3 h-3" />
+                  {completedCount}/{totalSteps} steps done
+                </span>
+              )}
+            </div>
           </div>
           
           {hasPlaybook && !loading && (
@@ -562,7 +703,7 @@ function AlertItemWithPlaybook({ evaluation, breach, isExpanded, onToggle, loadi
         </div>
       </div>
       
-      {/* Expanded Playbook */}
+      {/* Expanded Playbook with Checkboxes */}
       {isExpanded && hasPlaybook && (
         <div className={cn(
           "border-t p-4",
@@ -570,29 +711,92 @@ function AlertItemWithPlaybook({ evaluation, breach, isExpanded, onToggle, loadi
             ? "border-status-critical/20 bg-status-critical/10" 
             : "border-status-warning/20 bg-status-warning/10"
         )}>
-          <div className="flex items-center gap-2 mb-3">
-            <BookOpen className={cn(
-              "w-4 h-4",
-              isAlarm ? "text-status-critical" : "text-status-warning"
-            )} />
-            <span className="font-semibold text-foreground text-sm">{playbook.title}</span>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <BookOpen className={cn(
+                "w-4 h-4",
+                isAlarm ? "text-status-critical" : "text-status-warning"
+              )} />
+              <span className="font-semibold text-foreground text-sm">{playbook.title}</span>
+            </div>
+            <button
+              onClick={() => onSetAllComplete(!allComplete)}
+              className="text-xs text-primary hover:underline"
+            >
+              {allComplete ? 'Uncheck all' : 'Mark all complete'}
+            </button>
           </div>
           
+          {/* Progress bar */}
+          <div className="mb-4">
+            <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+              <span>Progress</span>
+              <span>{completedCount} of {totalSteps} steps</span>
+            </div>
+            <div className="h-2 bg-muted rounded-full overflow-hidden">
+              <div 
+                className={cn(
+                  "h-full transition-all duration-300 rounded-full",
+                  allComplete
+                    ? "bg-green-500"
+                    : isAlarm
+                    ? "bg-status-critical"
+                    : "bg-status-warning"
+                )}
+                style={{ width: `${(completedCount / totalSteps) * 100}%` }}
+              />
+            </div>
+          </div>
+          
+          {/* Steps with checkboxes */}
           <ol className="space-y-2">
-            {playbook.steps.map((step: string, index: number) => (
-              <li key={index} className="flex items-start gap-3">
-                <span className={cn(
-                  "w-5 h-5 rounded-full text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5",
-                  isAlarm 
-                    ? "bg-status-critical/30 text-status-critical" 
-                    : "bg-status-warning/30 text-status-warning"
-                )}>
-                  {index + 1}
-                </span>
-                <span className="text-sm text-foreground">{step}</span>
-              </li>
-            ))}
+            {playbook.steps.map((step: string, index: number) => {
+              const isCompleted = completedSteps.has(index);
+              return (
+                <li 
+                  key={index} 
+                  className={cn(
+                    "flex items-start gap-3 p-2 rounded-lg transition-colors cursor-pointer",
+                    isCompleted 
+                      ? "bg-green-50 dark:bg-green-950/30" 
+                      : "hover:bg-muted/50"
+                  )}
+                  onClick={() => onToggleStep(index)}
+                >
+                  <div className={cn(
+                    "w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors",
+                    isCompleted
+                      ? "bg-green-500 border-green-500 text-white"
+                      : isAlarm 
+                      ? "border-status-critical/50" 
+                      : "border-status-warning/50"
+                  )}>
+                    {isCompleted && <CheckCircle2 className="w-3 h-3" />}
+                  </div>
+                  <span className={cn(
+                    "text-sm flex-1",
+                    isCompleted ? "text-muted-foreground line-through" : "text-foreground"
+                  )}>
+                    {step}
+                  </span>
+                </li>
+              );
+            })}
           </ol>
+          
+          {/* Notes input */}
+          <div className="mt-4 pt-3 border-t border-border/50">
+            <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+              Remediation Notes (optional)
+            </label>
+            <textarea
+              value={remediationNote}
+              onChange={(e) => onUpdateNote(e.target.value)}
+              placeholder="Add notes about actions taken, observations, or follow-up needed..."
+              className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-background resize-none focus:outline-none focus:ring-2 focus:ring-primary/20"
+              rows={2}
+            />
+          </div>
           
           {playbook.referenceLinks && playbook.referenceLinks.length > 0 && (
             <div className="mt-4 pt-3 border-t border-border/50">
@@ -610,26 +814,60 @@ function AlertItemWithPlaybook({ evaluation, breach, isExpanded, onToggle, loadi
             </div>
           )}
           
-          <div className="mt-4 pt-3 border-t border-border/50 flex items-center gap-2 text-xs text-muted-foreground">
-            <CheckCircle2 className="w-3.5 h-3.5" />
-            <span>Complete these steps before submitting to ensure proper response</span>
-          </div>
+          {!allComplete && (
+            <div className={cn(
+              "mt-4 pt-3 border-t border-border/50 flex items-center gap-2 text-xs",
+              isAlarm ? "text-status-critical" : "text-status-warning"
+            )}>
+              <AlertCircle className="w-3.5 h-3.5" />
+              <span>Complete all steps to document proper remediation</span>
+            </div>
+          )}
+          
+          {allComplete && (
+            <div className="mt-4 pt-3 border-t border-border/50 flex items-center gap-2 text-xs text-green-600 dark:text-green-400">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>All remediation steps completed - ready to submit</span>
+            </div>
+          )}
         </div>
       )}
       
       {/* Quick actions preview when collapsed */}
-      {!isExpanded && evaluation.actions.length > 0 && (
+      {!isExpanded && hasPlaybook && (
         <div className="px-3 pb-3">
+          <div className="flex items-center gap-2 mb-1">
+            {completedCount > 0 ? (
+              <span className={cn(
+                "text-xs",
+                allComplete ? "text-green-600 dark:text-green-400" : "text-muted-foreground"
+              )}>
+                {completedCount}/{totalSteps} steps completed
+              </span>
+            ) : (
+              <span className="text-xs text-muted-foreground">
+                {totalSteps} remediation steps available
+              </span>
+            )}
+          </div>
           <ul className="text-xs text-muted-foreground space-y-1">
-            {evaluation.actions.slice(0, 2).map((action, i) => (
+            {playbook.steps.slice(0, 2).map((step: string, i: number) => (
               <li key={i} className="flex items-start gap-1.5">
-                <span className="text-muted-foreground/50">•</span>
-                <span className="line-clamp-1">{action}</span>
+                <span className={cn(
+                  "flex-shrink-0",
+                  completedSteps.has(i) ? "text-green-500" : "text-muted-foreground/50"
+                )}>
+                  {completedSteps.has(i) ? '✓' : '•'}
+                </span>
+                <span className={cn(
+                  "line-clamp-1",
+                  completedSteps.has(i) && "line-through"
+                )}>{step}</span>
               </li>
             ))}
-            {evaluation.actions.length > 2 && (
+            {playbook.steps.length > 2 && (
               <li className="text-muted-foreground/70 ml-3">
-                +{evaluation.actions.length - 2} more steps...
+                +{playbook.steps.length - 2} more steps...
               </li>
             )}
           </ul>
