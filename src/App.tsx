@@ -18,7 +18,6 @@ import EmailConfirmation from "./pages/EmailConfirmation";
 import NotFound from "./pages/NotFound";
 import Organizations from "./pages/Organizations";
 
-
 const queryClient = new QueryClient();
 
 // Main App component
