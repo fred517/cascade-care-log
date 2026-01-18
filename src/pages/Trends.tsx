@@ -101,7 +101,7 @@ export default function Trends() {
               {PARAMETERS[selectedMetric].unit && ` • Unit: ${PARAMETERS[selectedMetric].unit}`}
             </p>
           </div>
-          <div className="h-64 sm:h-80 min-w-0">
+          <div className="h-64 sm:h-80 min-w-0 overflow-hidden">
             <MetricChart
               metricId={selectedMetric}
               readings={mockReadings}
@@ -113,7 +113,7 @@ export default function Trends() {
 
         {/* All Metrics Overview */}
         <h2 className="text-xl font-semibold text-foreground mb-4">All Parameters Overview</h2>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
           {displayParams.map((paramKey) => {
             const param = PARAMETERS[paramKey];
             const threshold = mockThresholds.find(t => t.metricId === paramKey);
@@ -122,7 +122,7 @@ export default function Trends() {
               <div 
                 key={paramKey}
                 className={cn(
-                  "bg-card rounded-xl border p-4 transition-all duration-200 cursor-pointer",
+                  "bg-card rounded-xl border p-4 transition-all duration-200 cursor-pointer min-w-0 overflow-hidden",
                   selectedMetric === paramKey 
                     ? "border-primary" 
                     : "border-border hover:border-primary/50"
@@ -144,7 +144,7 @@ export default function Trends() {
                     </p>
                   </div>
                 </div>
-                <div className="h-32">
+                <div className="h-32 min-w-0 overflow-hidden">
                   <MetricChart
                     metricId={paramKey}
                     readings={mockReadings}
