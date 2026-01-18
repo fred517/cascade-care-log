@@ -100,23 +100,33 @@ export default function InteractiveSiteMap({ siteMap, incidents, onMapClick, onI
    * Returns null if coordinates are outside bounds or bounds not defined.
    */
   const geoToMapPosition = (lat: number, lng: number): { x: number; y: number } | null => {
-    const bounds = siteMap.geo_bounds;
+    // Check for explicit geo_bounds from database columns
+    const hasBounds = siteMap.geo_bounds_north !== null && 
+                      siteMap.geo_bounds_south !== null &&
+                      siteMap.geo_bounds_east !== null && 
+                      siteMap.geo_bounds_west !== null;
     
-    if (!bounds) {
-      // Fallback: if we have a center point, estimate bounds (±0.005° ≈ 500m)
-      if (siteMap.latitude && siteMap.longitude) {
-        const estimatedBounds = {
-          north: siteMap.latitude + 0.005,
-          south: siteMap.latitude - 0.005,
-          east: siteMap.longitude + 0.007,
-          west: siteMap.longitude - 0.007,
-        };
-        return geoToMapPositionWithBounds(lat, lng, estimatedBounds);
-      }
-      return null;
+    if (hasBounds) {
+      return geoToMapPositionWithBounds(lat, lng, {
+        north: siteMap.geo_bounds_north!,
+        south: siteMap.geo_bounds_south!,
+        east: siteMap.geo_bounds_east!,
+        west: siteMap.geo_bounds_west!,
+      });
     }
     
-    return geoToMapPositionWithBounds(lat, lng, bounds);
+    // Fallback: if we have a center point, estimate bounds (±0.005° ≈ 500m)
+    if (siteMap.latitude && siteMap.longitude) {
+      const estimatedBounds = {
+        north: siteMap.latitude + 0.005,
+        south: siteMap.latitude - 0.005,
+        east: siteMap.longitude + 0.007,
+        west: siteMap.longitude - 0.007,
+      };
+      return geoToMapPositionWithBounds(lat, lng, estimatedBounds);
+    }
+    
+    return null;
   };
 
   const geoToMapPositionWithBounds = (
